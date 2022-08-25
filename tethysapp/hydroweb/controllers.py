@@ -7,7 +7,12 @@ import pandas as pd
 from .app import Hydroweb as app
 from rest_framework.decorators import api_view,authentication_classes, permission_classes
 from django.test.client import Client
+from .model import River, Lake
+import geopandas as gpd
+from sqlalchemy.orm import sessionmaker
 
+
+Persistent_Store_Name = 'virtual_stations'
 
 @login_required()
 def home(request):
@@ -46,3 +51,58 @@ def getVirtualStationData(request):
         'uncertainties': data_df['associated_uncertainty'].to_list()
     }
     return JsonResponse(resp_obj)
+
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([])
+def virtual_stations(request):
+    geojson_stations = {}
+
+    SessionMaker = app.get_persistent_store_database(Persistent_Store_Name, as_sessionmaker=True)
+    session = SessionMaker()
+
+    only_rivers_features= session.query(River.geom.ST_AsGeoJSON(), River.river_name, River.basin,River.status,River.validation).all()
+    only_lakes_features= session.query(Lake.geom.ST_AsGeoJSON(), Lake.lake_name, Lake.basin,Lake.status,Lake.validation).all()
+    session.commit()
+    session.close()
+    features = []
+
+    for only_rivers_feature in only_rivers_features:
+        river_extent_feature = {
+            'type': 'Feature',
+            'geometry': json.loads(only_rivers_feature[0]),
+            'properties':{
+                'river_name': only_rivers_feature[1],
+                'basin':only_rivers_feature[2],
+                'status':only_rivers_feature[3],
+                'validation':only_rivers_feature[4]
+            }
+
+        }
+        features.append(river_extent_feature)
+
+    for only_lakes_feature in only_lakes_features:
+        lake_extent_feature = {
+            'type': 'Feature',
+            'geometry': json.loads(only_lakes_feature[0]),
+            'properties':{
+                'river_name': only_lakes_feature[1],
+                'basin':only_lakes_feature[2],
+                'status':only_lakes_feature[3],
+                'validation':only_lakes_feature[4]
+            }
+
+        }
+        features.append(lake_extent_feature)
+    geojson_stations = {
+        'type': 'FeatureCollection',
+        'crs': {
+            'type': 'name',
+            'properties': {
+                'name': 'EPSG:4326'
+            }
+        },
+        'features': features
+    }
+    
+    return JsonResponse(geojson_stations)

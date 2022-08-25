@@ -1,6 +1,6 @@
 from tethys_sdk.base import TethysAppBase, url_map_maker
 
-from tethys_sdk.app_settings import CustomSetting
+from tethys_sdk.app_settings import CustomSetting, PersistentStoreDatabaseSetting
 
 class Hydroweb(TethysAppBase):
     """
@@ -35,6 +35,11 @@ class Hydroweb(TethysAppBase):
                 url='getVirtualStationData/',
                 controller='hydroweb.controllers.getVirtualStationData'
             ),
+            UrlMap(
+                name='getVirtualStations',
+                url='getVirtualStations/',
+                controller='hydroweb.controllers.virtual_stations'
+            ),
         )
 
         return url_maps
@@ -57,3 +62,19 @@ class Hydroweb(TethysAppBase):
             ),
         )
         return custom_settings
+
+    def persistent_store_settings(self):
+        """
+        Add one or more persistent_stores.
+        """
+        # Create a new persistent store (database)
+        stores = (
+            PersistentStoreDatabaseSetting(
+                name='virtual_stations',
+                initializer='hydroweb.init_stores.init_flooded_addresses_db',
+                spatial=True,
+                required=True,
+            ),
+        )
+
+        return stores
