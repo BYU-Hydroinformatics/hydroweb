@@ -1,0 +1,5 @@
+geopandas
+postgis
+djangorestframework
+geoalchemy2
+django-cors-headers
