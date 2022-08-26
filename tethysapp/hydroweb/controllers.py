@@ -28,15 +28,15 @@ def home(request):
 @authentication_classes([])
 @permission_classes([])
 def getVirtualStationData(request):
+    print(request)
     resp_obj = {}
-    product = request.GET.get('product')
+    product = request.data.get('product')
     user = app.get_custom_setting('Hydroweb Username')
     pwd = app.get_custom_setting('Hydroweb Password')
     url= f'https://hydroweb.theia-land.fr/hydroweb/authdownload?products={product}&format=json&user={user}&pwd={pwd}'
-
+    print(url)
     response= requests.get(url)
     json_obj = json.loads(response.text)
-
     data_obj = json_obj['data']
 
     df = pd.DataFrame.from_dict(data_obj)
@@ -61,8 +61,8 @@ def virtual_stations(request):
     SessionMaker = app.get_persistent_store_database(Persistent_Store_Name, as_sessionmaker=True)
     session = SessionMaker()
 
-    only_rivers_features= session.query(River.geom.ST_AsGeoJSON(), River.river_name, River.basin,River.status,River.validation).all()
-    only_lakes_features= session.query(Lake.geom.ST_AsGeoJSON(), Lake.lake_name, Lake.basin,Lake.status,Lake.validation).all()
+    only_rivers_features= session.query(River.geom.ST_AsGeoJSON(), River.river_name, River.basin,River.status,River.validation,River.name).all()
+    only_lakes_features= session.query(Lake.geom.ST_AsGeoJSON(), Lake.lake_name, Lake.basin,Lake.status,Lake.validation,Lake.name).all()
     session.commit()
     session.close()
     features = []
@@ -75,7 +75,9 @@ def virtual_stations(request):
                 'river_name': only_rivers_feature[1],
                 'basin':only_rivers_feature[2],
                 'status':only_rivers_feature[3],
-                'validation':only_rivers_feature[4]
+                'validation':only_rivers_feature[4],
+                'comid': only_rivers_feature[5]
+
             }
 
         }
@@ -89,7 +91,9 @@ def virtual_stations(request):
                 'lake_name': only_lakes_feature[1],
                 'basin':only_lakes_feature[2],
                 'status':only_lakes_feature[3],
-                'validation':only_lakes_feature[4]
+                'validation':only_lakes_feature[4],
+                'comid': only_lakes_feature[5]
+
             }
 
         }
