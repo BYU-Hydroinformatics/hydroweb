@@ -86,7 +86,7 @@ def virtual_stations(request):
             'type': 'Feature',
             'geometry': json.loads(only_lakes_feature[0]),
             'properties':{
-                'river_name': only_lakes_feature[1],
+                'lake_name': only_lakes_feature[1],
                 'basin':only_lakes_feature[2],
                 'status':only_lakes_feature[3],
                 'validation':only_lakes_feature[4]
