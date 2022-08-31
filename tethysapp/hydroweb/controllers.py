@@ -38,18 +38,29 @@ def getVirtualStationData(request):
     response= requests.get(url)
     json_obj = json.loads(response.text)
     data_obj = json_obj['data']
-
-    df = pd.DataFrame.from_dict(data_obj)
-    data_df = df[['date', 'orthometric_height_of_water_surface_at_reference_position', 'associated_uncertainty']].copy()
-
     resp_obj['geometry'] = json_obj['geometry']
     resp_obj['properties'] = json_obj['properties']
-    # print(data_df['date'].to_list)
-    resp_obj['data'] ={
-        'dates': data_df['date'].to_list(),
-        'values': data_df['orthometric_height_of_water_surface_at_reference_position'].to_list(),
-        'uncertainties': data_df['associated_uncertainty'].to_list()
-    }
+    print(data_obj)
+    df = pd.DataFrame.from_dict(data_obj)
+    if product.startswith('R'):
+
+        data_df = df[['date', 'orthometric_height_of_water_surface_at_reference_position', 'associated_uncertainty']].copy()
+        data_df ["up_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] + data_df['associated_uncertainty']
+        data_df ["down_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] - data_df['associated_uncertainty']
+        data_dict = data_df.to_dict('records')
+
+        resp_obj['data'] = data_dict
+        # resp_obj['data'] ={
+        #     'dates': data_df['date'].to_list(),
+        #     'values': data_df['orthometric_height_of_water_surface_at_reference_position'].to_list(),
+        #     'uncertainties': data_df['associated_uncertainty'].to_list()
+        # }
+    else:
+        data_df = df[['datetime', 'water_surface_height_above_reference_datum', 'water_surface_height_uncertainty','area','volume']].copy()
+        data_df ["up_uncertainty"] = data_df['water_surface_height_above_reference_datum'] + data_df['water_surface_height_uncertainty']
+        data_df ["down_uncertainty"] = data_df['water_surface_height_above_reference_datum'] - data_df['water_surface_height_uncertainty']
+        data_dict = data_df.to_dict('records')
+        resp_obj['data'] = data_dict
     return JsonResponse(resp_obj)
 
 @api_view(['GET', 'POST'])
