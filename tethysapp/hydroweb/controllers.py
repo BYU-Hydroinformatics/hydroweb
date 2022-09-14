@@ -43,13 +43,35 @@ def getVirtualStationData(request):
     print(data_obj)
     df = pd.DataFrame.from_dict(data_obj)
     if product.startswith('R'):
-
+        
         data_df = df[['date', 'orthometric_height_of_water_surface_at_reference_position', 'associated_uncertainty']].copy()
         data_df ["up_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] + data_df['associated_uncertainty']
         data_df ["down_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] - data_df['associated_uncertainty']
-        data_dict = data_df.to_dict('records')
+        
+        df_val = data_df[['date', 'orthometric_height_of_water_surface_at_reference_position']].copy()
+        df_val = df_val.rename(columns={'date': 'x', 'orthometric_height_of_water_surface_at_reference_position': 'y'})
 
-        resp_obj['data'] = data_dict
+        df_min = data_df[['date', 'down_uncertainty']].copy()
+        df_min = df_min.rename(columns={'date': 'x', 'down_uncertainty': 'y'})
+
+        df_max = data_df[['date', 'up_uncertainty']].copy()
+        df_max = df_max.rename(columns={'date': 'x', 'up_uncertainty': 'y'})
+
+
+        data_val = df_val.to_dict('records')
+        data_max = df_max.to_dict('records')
+        data_min = df_min.to_dict('records')
+
+
+        # data_dict = data_df.to_dict('records')
+
+        # resp_obj['data'] = data_dict
+        resp_obj['data'] = {
+            'val': data_val,
+            'min': data_min,
+            'max': data_max
+        }
+
         # resp_obj['data'] ={
         #     'dates': data_df['date'].to_list(),
         #     'values': data_df['orthometric_height_of_water_surface_at_reference_position'].to_list(),
