@@ -40,6 +40,17 @@ class Hydroweb(TethysAppBase):
                 url='getVirtualStations/',
                 controller='hydroweb.controllers.virtual_stations'
             ),
+            UrlMap(
+                name='saveHistoricalSimulationData',
+                url='saveHistoricalSimulationData/',
+                controller='hydroweb.controllers.saveHistoricalSimulationData'
+            ),
+            UrlMap(
+                name='data_notification',
+                url='data-notification/notifications',
+                controller='hydroweb.consumers.DataConsumer',
+                protocol='websocket'
+            ),
         )
 
         return url_maps

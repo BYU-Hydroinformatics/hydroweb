@@ -10,9 +10,16 @@ from django.test.client import Client
 from .model import River, Lake
 import geopandas as gpd
 from sqlalchemy.orm import sessionmaker
-
+import io
+import os
+import geoglows
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
+import asyncio
+import httpx
 
 Persistent_Store_Name = 'virtual_stations'
+async_client = httpx.AsyncClient()
 
 @login_required()
 def home(request):
@@ -40,7 +47,7 @@ def getVirtualStationData(request):
     data_obj = json_obj['data']
     resp_obj['geometry'] = json_obj['geometry']
     resp_obj['properties'] = json_obj['properties']
-    print(data_obj)
+    # print(data_obj)
     df = pd.DataFrame.from_dict(data_obj)
     if product.startswith('R'):
         
@@ -72,11 +79,14 @@ def getVirtualStationData(request):
             'max': data_max
         }
 
-        # resp_obj['data'] ={
-        #     'dates': data_df['date'].to_list(),
-        #     'values': data_df['orthometric_height_of_water_surface_at_reference_position'].to_list(),
-        #     'uncertainties': data_df['associated_uncertainty'].to_list()
-        # }
+        ## saving it to the workspaces for alter use ##
+        if not os.path.exists(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json')):
+            df_val.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+            df_max.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+            df_min.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+        else:
+            print("files are already saved")
+
     else:
         data_df = df[['datetime', 'water_surface_height_above_reference_datum', 'water_surface_height_uncertainty','area','volume']].copy()
         data_df ["up_uncertainty"] = data_df['water_surface_height_above_reference_datum'] + data_df['water_surface_height_uncertainty']
@@ -109,7 +119,8 @@ def virtual_stations(request):
                 'basin':only_rivers_feature[2],
                 'status':only_rivers_feature[3],
                 'validation':only_rivers_feature[4],
-                'comid': only_rivers_feature[5]
+                'comid': only_rivers_feature[5],
+                'comid_geoglows':9007781
 
             }
 
@@ -143,3 +154,139 @@ def virtual_stations(request):
     }
     
     return JsonResponse(geojson_stations)
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([])
+def saveHistoricalSimulationData(request):
+    print("sucess")
+    reach_id = request.data.get('reach_id')
+
+    ##3 here you need to do the controller asyncronico y ver si da o si no simplemente asi
+    
+
+
+
+    # return_format = request.data.get('return_format')
+    # json_data = request.data.get('data')
+    # era_res = requests.get(
+    #      'https://geoglows.ecmwf.int/api/HistoricSimulation/?reach_id=' + reach_id + '&return_format=' + return_format,
+    #     verify=False).content
+
+    # simulated_df = pd.read_csv(io.StringIO(era_res.decode('utf-8')), index_col=0)
+    # simulated_df[simulated_df < 0] = 0
+
+    # simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}'))
+
+    # simulated_df[simulated_df < 0] = 0
+    # simulated_df.index = pd.to_datetime(simulated_df.index)
+    # simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
+    # simulated_df.index = pd.to_datetime(simulated_df.index)
+    return JsonResponse({})
+
+async def api_call(api_base_url,reach_id):
+    mssge_string = "Complete"
+    channel_layer = get_channel_layer()
+
+    try:
+        response_await = await async_client.get(
+                    url = f"{api_base_url}/HistoricSimulation/",
+                    params = {
+                        "reach_id": reach_id,
+                        "return_format": "csv",
+                    }            
+        )
+
+        response = response_await.json()
+        simulated_df = pd.read_csv(io.StringIO(response.decode('utf-8')), index_col=0)
+        simulated_df[simulated_df < 0] = 0
+
+        simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}'))
+
+        async_to_sync(channel_layer.group_send)(
+            "notifications",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "mssg": mssge_string,
+            },
+        )
+    except Exception as e:
+        print(e)
+        mssge_string = "incomplete"
+        async_to_sync(channel_layer.group_send)(
+            "notifications",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "mssg": mssge_string,
+            },
+        )
+    return mssge_string
+
+
+
+async def bias_correction(product,reach_id):
+    json_response = {}
+    #Hydroweb Observed Data
+
+    mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+    mean_wl.set_index('x', inplace=True)
+    mean_wl.index = pd.to_datetime(mean_wl.index)
+
+    min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+    min_wl.set_index('x', inplace=True)
+    min_wl.index = pd.to_datetime(min_wl.index)
+    
+    max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+    max_wl.set_index('x', inplace=True)
+    max_wl.index = pd.to_datetime(max_wl.index)
+    
+    #Mean Water Level
+    min_value1 = mean_wl['x'].min()
+
+    if min_value1 >= 0:
+        min_value1 = 0
+
+    mean_adjusted = mean_wl - min_value1
+
+    #Min Water Level
+    min_value2 = min_wl['x'].min()
+
+    if min_value2 >= 0:
+        min_value2 = 0
+
+    min_adjusted = min_wl - min_value2
+
+    #Max Water Level
+    min_value3 = max_wl['x'].min()
+
+    if min_value3 >= 0:
+        min_value3 = 0
+
+    max_adjusted = max_wl - min_value3
+
+    #Geoglows Historical Simulation Data
+    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}'))
+
+    #Bias Correction 
+
+    #Mean Water Level
+    corrected_mean_wl = geoglows.bias.correct_historical(simulated_df, mean_adjusted)
+    corrected_mean_wl = corrected_mean_wl + min_value1
+
+    #Min Water Level
+    corrected_min_wl = geoglows.bias.correct_historical(simulated_df, min_adjusted)
+    corrected_min_wl = corrected_min_wl + min_value2
+
+    #Max Water Level
+    corrected_max_wl = geoglows.bias.correct_historical(simulated_df, max_adjusted)
+    corrected_max_wl = corrected_max_wl + min_value3
+
+    #Save the bias corrected data locally
+    corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean'))
+    corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min'))
+    corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max'))
+
+    pass
