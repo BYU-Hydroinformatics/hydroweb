@@ -160,10 +160,24 @@ def virtual_stations(request):
 @authentication_classes([])
 @permission_classes([])
 def saveHistoricalSimulationData(request):
-    print("sucess")
+    print("success")
     reach_id = request.data.get('reach_id')
+    print(reach_id)
+    loop = asyncio.get_event_loop()
+    response = "executing"
+    try:
+        api_base_url = 'https://geoglows.ecmwf.int/api'        
+        asyncio.run(make_api_calls(api_base_url,reach_id))
 
-    ##3 here you need to do the controller asyncronico y ver si da o si no simplemente asi
+    except Exception as e:
+        print('saveHistoricalSimulationData error')
+        print(e)
+    finally:
+        print('finally')
+
+        # loop.close()
+
+    ## here you need to do the controller asyncronico y ver si da o si no simplemente asi
     
 
 
@@ -183,29 +197,73 @@ def saveHistoricalSimulationData(request):
     # simulated_df.index = pd.to_datetime(simulated_df.index)
     # simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
     # simulated_df.index = pd.to_datetime(simulated_df.index)
-    return JsonResponse({})
+    return JsonResponse({'state':response })
+
+async def make_api_calls(api_base_url,reach_id):
+    print("here")
+    if not os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'):
+        task_get_geoglows_data = await asyncio.create_task(api_call(api_base_url,reach_id))
+    else:
+        task_get_geoglows_data = await asyncio.create_task(fake_print(api_base_url,reach_id))
+
+    return task_get_geoglows_data
+
+# A fast co-routine
+async def fake_print(api_base_url,reach_id):
+    print(f'request at {api_base_url},for {reach_id} already saved')
+    await asyncio.sleep(1) # Mimic some network delay
+    channel_layer = get_channel_layer()
+   
+    await channel_layer.group_send(
+        "notifications_hydroweb",
+        {
+            "type": "simple_notifications",
+            "reach_id": reach_id,
+            "mssg": "Complete",
+        },
+    )
+    return 0
 
 async def api_call(api_base_url,reach_id):
+    print("ghere async")
     mssge_string = "Complete"
     channel_layer = get_channel_layer()
-
+    print(reach_id)
+    print(f"{api_base_url}/HistoricSimulation/")
     try:
         response_await = await async_client.get(
                     url = f"{api_base_url}/HistoricSimulation/",
                     params = {
-                        "reach_id": reach_id,
-                        "return_format": "csv",
-                    }            
+                        "reach_id": reach_id
+                    },
+                    timeout=None          
         )
 
-        response = response_await.json()
-        simulated_df = pd.read_csv(io.StringIO(response.decode('utf-8')), index_col=0)
+        # response = response_await.json()
+        print(response_await)
+        # print(response_await.text)
+        simulated_df = pd.read_csv(io.StringIO(response_await.text), index_col=0)
         simulated_df[simulated_df < 0] = 0
 
-        simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}'))
+        simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
 
-        async_to_sync(channel_layer.group_send)(
-            "notifications",
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "mssg": mssge_string,
+            },
+        )
+    except httpx.HTTPError as exc:
+
+        print("api_call error")
+        print(f"Error while requesting {exc.request.url!r}.")
+
+        print(str(exc.__class__.__name__))
+        mssge_string = "incomplete"
+        await channel_layer.group_send(
+            "notifications_hydroweb",
             {
                 "type": "simple_notifications",
                 "reach_id": reach_id,
@@ -213,16 +271,8 @@ async def api_call(api_base_url,reach_id):
             },
         )
     except Exception as e:
+        print("api_call error 2")
         print(e)
-        mssge_string = "incomplete"
-        async_to_sync(channel_layer.group_send)(
-            "notifications",
-            {
-                "type": "simple_notifications",
-                "reach_id": reach_id,
-                "mssg": mssge_string,
-            },
-        )
     return mssge_string
 
 
