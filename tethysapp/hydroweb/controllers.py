@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from tethys_sdk.permissions import login_required
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 import requests
 import json
 import pandas as pd
@@ -159,15 +159,20 @@ def virtual_stations(request):
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
+# we need to check how to enable all middleware to have asynch views 
 def saveHistoricalSimulationData(request):
     print("success")
     reach_id = request.data.get('reach_id')
+    product = request.data.get('product')
+
+    # reach_id = request.GET.get('reach_id')
+    # reach_id = 9890
     print(reach_id)
-    loop = asyncio.get_event_loop()
+    # loop = asyncio.get_event_loop()
     response = "executing"
     try:
         api_base_url = 'https://geoglows.ecmwf.int/api'        
-        asyncio.run(make_api_calls(api_base_url,reach_id))
+        asyncio.run(make_api_calls(api_base_url,reach_id,product))
 
     except Exception as e:
         print('saveHistoricalSimulationData error')
@@ -198,18 +203,19 @@ def saveHistoricalSimulationData(request):
     # simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
     # simulated_df.index = pd.to_datetime(simulated_df.index)
     return JsonResponse({'state':response })
+    # return HttpResponse('Non-blocking HTTP request')
 
-async def make_api_calls(api_base_url,reach_id):
+async def make_api_calls(api_base_url,reach_id,product):
     print("here")
     if not os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'):
-        task_get_geoglows_data = await asyncio.create_task(api_call(api_base_url,reach_id))
+        task_get_geoglows_data = await asyncio.create_task(api_call(api_base_url,reach_id,product))
     else:
-        task_get_geoglows_data = await asyncio.create_task(fake_print(api_base_url,reach_id))
+        task_get_geoglows_data = await asyncio.create_task(fake_print(api_base_url,reach_id,product))
 
     return task_get_geoglows_data
 
 # A fast co-routine
-async def fake_print(api_base_url,reach_id):
+async def fake_print(api_base_url,reach_id,product):
     print(f'request at {api_base_url},for {reach_id} already saved')
     await asyncio.sleep(1) # Mimic some network delay
     channel_layer = get_channel_layer()
@@ -219,12 +225,14 @@ async def fake_print(api_base_url,reach_id):
         {
             "type": "simple_notifications",
             "reach_id": reach_id,
+            "product": product,
             "mssg": "Complete",
         },
     )
     return 0
 
-async def api_call(api_base_url,reach_id):
+
+async def api_call(api_base_url,reach_id,product):
     print("ghere async")
     mssge_string = "Complete"
     channel_layer = get_channel_layer()
@@ -252,6 +260,7 @@ async def api_call(api_base_url,reach_id):
             {
                 "type": "simple_notifications",
                 "reach_id": reach_id,
+                "product": product,
                 "mssg": mssge_string,
             },
         )
@@ -267,7 +276,8 @@ async def api_call(api_base_url,reach_id):
             {
                 "type": "simple_notifications",
                 "reach_id": reach_id,
-                "mssg": mssge_string,
+                "product": product,
+                "mssg": mssge_string
             },
         )
     except Exception as e:
@@ -275,6 +285,9 @@ async def api_call(api_base_url,reach_id):
         print(e)
     return mssge_string
 
+async def retrieve_data(product,reach_id):
+    
+    pass
 
 
 async def bias_correction(product,reach_id):
