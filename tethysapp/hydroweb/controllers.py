@@ -227,6 +227,8 @@ async def fake_print(api_base_url,reach_id,product):
             "reach_id": reach_id,
             "product": product,
             "mssg": "Complete",
+            "command": "Data_Downloaded",
+
         },
     )
     return 0
@@ -261,6 +263,7 @@ async def api_call(api_base_url,reach_id,product):
                 "type": "simple_notifications",
                 "reach_id": reach_id,
                 "product": product,
+                "command": "Data_Downloaded",
                 "mssg": mssge_string,
             },
         )
@@ -277,7 +280,9 @@ async def api_call(api_base_url,reach_id,product):
                 "type": "simple_notifications",
                 "reach_id": reach_id,
                 "product": product,
-                "mssg": mssge_string
+                "mssg": mssge_string,
+                "command": "Data_Downloaded Error",
+                
             },
         )
     except Exception as e:
@@ -285,13 +290,100 @@ async def api_call(api_base_url,reach_id,product):
         print(e)
     return mssge_string
 
-async def retrieve_data(product,reach_id):
-    
-    pass
+# async def retrieve_data_from_file(data_id):
+#     print("retrieve_data_from_file")
+#     task_get_file_data = await asyncio.create_task(retrieve_data(data_id))
+#     return task_get_file_data
 
+
+
+# async def retrieve_data(data_id):
+#     simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
+#     print("hola")
+#     await print(simulated_df)
+#     pass
+
+def retrieve_data(data_id,product):
+    json_obj = {}
+    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
+    # Removing Negative Values
+    simulated_df[simulated_df < 0] = 0
+    simulated_df.index = pd.to_datetime(simulated_df.index)
+    simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
+    simulated_df.index = pd.to_datetime(simulated_df.index)
+    simulated_df = simulated_df.reset_index()
+    # print("hola")
+    print(simulated_df)
+    simulated_df = simulated_df.rename(columns={'index': 'x', 'streamflow_m^3/s': 'y'})
+    simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
+
+    simulated_json = simulated_df.to_json(orient='records')
+
+    mssge_string = "Plot_Data"
+    json_obj["data"] = simulated_json
+    json_obj["mssg"] = "complete"
+    json_obj['type'] = 'data_notifications'
+    json_obj['product'] = product,
+    json_obj['reach_id'] = data_id,
+    json_obj['command'] = mssge_string
+
+    return json_obj
+
+# A fast co-routine
+async def fake_print2(reach_id,product):
+    print(f'request at corrected data,for {reach_id} already saved')
+    await asyncio.sleep(1) # Mimic some network delay
+    channel_layer = get_channel_layer()
+   
+    await channel_layer.group_send(
+        "notifications_hydroweb",
+        {
+            "type": "simple_notifications",
+            "reach_id": reach_id,
+            "product": product,
+            "mssg": "Complete",
+            "command": "Data_Downloaded",
+
+        },
+    )
+    return 0
+
+async def make_bias_correction(reach_id,product):
+    print("here")
+    if not os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}.json'):
+        task_get_geoglows_data = await asyncio.create_task(bias_correction(reach_id,product))
+    else:
+        task_get_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
+
+    return task_get_geoglows_data
+
+
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([])
+# we need to check how to enable all middleware to have asynch views 
+def executeBiasCorrection(request):
+    print("success")
+    reach_id = request.data.get('reach_id')
+    product = request.data.get('product')
+
+    # reach_id = request.GET.get('reach_id')
+    # reach_id = 9890
+    print(reach_id)
+    # loop = asyncio.get_event_loop()
+    response = "executing"
+    try:
+
+        asyncio.run(make_bias_correction(reach_id,product))
+
+    except Exception as e:
+        print('executeBiasCorrection error')
+        print(e)
+    finally:
+        print('finally')
 
 async def bias_correction(product,reach_id):
-    json_response = {}
+    json_obj = {}
     #Hydroweb Observed Data
 
     mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
@@ -351,5 +443,18 @@ async def bias_correction(product,reach_id):
     corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean'))
     corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min'))
     corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max'))
-
+    
+    # mssge_string = "Plot_Data"
+    # json_obj["data"] = simulated_json
+    # json_obj["mssg"] = "complete"
+    # json_obj['type'] = 'data_notifications'
+    # json_obj['product'] = product,
+    # json_obj['reach_id'] = data_id,
+    # json_obj['command'] = mssge_string
+    
+    # channel_layer = get_channel_layer()
+    # await channel_layer.group_send (
+    #     "notifications_hydroweb",
+    #     json_obj,
+    # )
     pass

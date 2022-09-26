@@ -46,6 +46,11 @@ class Hydroweb(TethysAppBase):
                 controller='hydroweb.controllers.saveHistoricalSimulationData'
             ),
             UrlMap(
+                name='executeBiasCorrection',
+                url='executeBiasCorrection/',
+                controller='hydroweb.controllers.executeBiasCorrection'
+            ),
+            UrlMap(
                 name='data_notification',
                 url='data-notification/notifications',
                 controller='hydroweb.consumers.DataConsumer',

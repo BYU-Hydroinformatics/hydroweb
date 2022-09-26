@@ -1,7 +1,8 @@
 import json
+import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
-
-
+from .controllers import retrieve_data
+from asgiref.sync import async_to_sync
 
 
 class DataConsumer(AsyncWebsocketConsumer):
@@ -23,28 +24,32 @@ class DataConsumer(AsyncWebsocketConsumer):
         print(text_data_json)
         if "type" in text_data_json and text_data_json["type"] == "plot_hs_data":
             print("yeah")
-
+            # asyncio.run(retrieve_data_from_file(text_data_json['reach_id']))
+            json_obj = retrieve_data(text_data_json['reach_id'],text_data_json['product'])
+            await self.channel_layer.group_send (
+                "notifications_hydroweb",
+                json_obj,
+            )
+            # print(mssge_string)
         # await self.send(text_data)
- 
+
 
     async def data_notifications(self, event):
-        print(event)
+        # print(event)
         print("data_notifications from consumer")
 
-        count = event["count"]
-        status = event["status"]
-        file = event["file"]
-        id_ = event["id"]
-        total_count = event["total"]
-        mssge = event["mssg"]
+        message = event["mssg"]
+        reach_id = event["reach_id"]
+        product = event["product"]
+        command = event["command"]
+        data = event['data']
 
         resp_obj = {
-            "count": count,
-            "status": status,
-            "file": file,
-            "id": id_,
-            "total": total_count,
-            "mssg": mssge,
+            "message": message,
+            "reach_id": reach_id,
+            "product": product,
+            "command": command,
+            "data": data,
         }
         await self.send(text_data=json.dumps(resp_obj))
         print(f"Got message {event} at {self.channel_name}")
@@ -54,5 +59,6 @@ class DataConsumer(AsyncWebsocketConsumer):
         message = event["mssg"]
         reach_id = event["reach_id"]
         product = event["product"]
-        await self.send(text_data=json.dumps({"message": message,"reach_id":reach_id, "product": product}))
+        command = event["command"]
+        await self.send(text_data=json.dumps({"message": message,"reach_id":reach_id, "product": product,"command":command}))
         print(f"Got message {event} at {self.channel_name}")
