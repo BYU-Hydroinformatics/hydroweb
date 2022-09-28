@@ -344,7 +344,7 @@ async def fake_print2(reach_id,product):
             "reach_id": reach_id,
             "product": product,
             "mssg": "Complete",
-            "command": "bias_corrected",
+            "command": "Bias_Data_Downloaded",
 
         },
     )
@@ -492,27 +492,51 @@ async def bias_correction(product,reach_id):
 
 
 def retrieve_data_bias_corrected(data_id,product):
+
+
+
     json_obj = {}
-    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
+    corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json'))
+    print(corrected_df_mean)
+    corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_max.json'))
+    corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_min.json'))
+
+    
     # Removing Negative Values
-    simulated_df[simulated_df < 0] = 0
-    simulated_df.index = pd.to_datetime(simulated_df.index)
-    simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
-    simulated_df.index = pd.to_datetime(simulated_df.index)
-    simulated_df = simulated_df.reset_index()
-    # print("hola")
-    print(simulated_df)
-    simulated_df = simulated_df.rename(columns={'index': 'x', 'streamflow_m^3/s': 'y'})
-    simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
+    
+    
+    # corrected_df_mean[''] = pd.to_datetime(simulated_df.index)
+    # simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
+    # simulated_df.index = pd.to_datetime(simulated_df.index)
+    # simulated_df = simulated_df.reset_index()
+    # # print("hola")
+    # print(simulated_df)
+    # simulated_df = simulated_df.rename(columns={'index': 'x', 'streamflow_m^3/s': 'y'})
+    # simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
 
-    simulated_json = simulated_df.to_json(orient='records')
+    # simulated_json = simulated_df.to_json(orient='records')
 
-    mssge_string = "Plot_Data"
-    json_obj["data"] = simulated_json
-    json_obj["mssg"] = "complete"
-    json_obj['type'] = 'data_notifications'
-    json_obj['product'] = product,
-    json_obj['reach_id'] = data_id,
-    json_obj['command'] = mssge_string
+    # mssge_string = "Plot_Data"
+    # json_obj["data"] = simulated_json
+    # json_obj["mssg"] = "complete"
+    # json_obj['type'] = 'data_notifications'
+    # json_obj['product'] = product,
+    # json_obj['reach_id'] = data_id,
+    # json_obj['command'] = mssge_string
+
+    # data_val = df_val.to_dict('records')
+    # data_max = df_max.to_dict('records')
+    # data_min = df_min.to_dict('records')
+
+
+    # # data_dict = data_df.to_dict('records')
+
+    # # resp_obj['data'] = data_dict
+    # resp_obj['data'] = {
+    #     'val': data_val,
+    #     'min': data_min,
+    #     'max': data_max
+    # }
+    
 
     return json_obj    
