@@ -1,7 +1,7 @@
 import json
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
-from .controllers import retrieve_data
+from .controllers import retrieve_data, retrieve_data_bias_corrected
 from asgiref.sync import async_to_sync
 
 
@@ -23,13 +23,19 @@ class DataConsumer(AsyncWebsocketConsumer):
         text_data_json = json.loads(text_data)
         print(text_data_json)
         if "type" in text_data_json and text_data_json["type"] == "plot_hs_data":
-            print("yeah")
             # asyncio.run(retrieve_data_from_file(text_data_json['reach_id']))
             json_obj = retrieve_data(text_data_json['reach_id'],text_data_json['product'])
             await self.channel_layer.group_send (
                 "notifications_hydroweb",
                 json_obj,
             )
+        if "type" in text_data_json and text_data_json["type"] == "plot_bias_corrected_data":
+            # asyncio.run(retrieve_data_from_file(text_data_json['reach_id']))
+            json_obj = retrieve_data_bias_corrected(text_data_json['reach_id'],text_data_json['product'])
+            await self.channel_layer.group_send (
+                "notifications_hydroweb",
+                json_obj,
+            )    
             # print(mssge_string)
         # await self.send(text_data)
 

@@ -17,6 +17,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import asyncio
 import httpx
+import traceback
 
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
@@ -177,6 +178,7 @@ def saveHistoricalSimulationData(request):
     except Exception as e:
         print('saveHistoricalSimulationData error')
         print(e)
+        print(traceback.format_exc())
     finally:
         print('finally')
 
@@ -207,7 +209,7 @@ def saveHistoricalSimulationData(request):
 
 async def make_api_calls(api_base_url,reach_id,product):
     print("here")
-    if not os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'):
+    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json')):
         task_get_geoglows_data = await asyncio.create_task(api_call(api_base_url,reach_id,product))
     else:
         task_get_geoglows_data = await asyncio.create_task(fake_print(api_base_url,reach_id,product))
@@ -342,20 +344,22 @@ async def fake_print2(reach_id,product):
             "reach_id": reach_id,
             "product": product,
             "mssg": "Complete",
-            "command": "Data_Downloaded",
+            "command": "bias_corrected",
 
         },
     )
     return 0
 
 async def make_bias_correction(reach_id,product):
-    print("here")
-    if not os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}.json'):
-        task_get_geoglows_data = await asyncio.create_task(bias_correction(reach_id,product))
-    else:
-        task_get_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
+    print(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
 
-    return task_get_geoglows_data
+    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json')):
+        print("not here")
+        task_get_bias_geoglows_data = await asyncio.create_task(bias_correction(product,reach_id))
+    else:
+        task_get_bias_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
+
+    return task_get_bias_geoglows_data
 
 
 @api_view(['GET', 'POST'])
@@ -381,69 +385,96 @@ def executeBiasCorrection(request):
         print(e)
     finally:
         print('finally')
+    return JsonResponse({'state':response })
 
 async def bias_correction(product,reach_id):
-    json_obj = {}
-    #Hydroweb Observed Data
-
-    mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
-    mean_wl.set_index('x', inplace=True)
-    mean_wl.index = pd.to_datetime(mean_wl.index)
-
-    min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
-    min_wl.set_index('x', inplace=True)
-    min_wl.index = pd.to_datetime(min_wl.index)
     
-    max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
-    max_wl.set_index('x', inplace=True)
-    max_wl.index = pd.to_datetime(max_wl.index)
-    
-    #Mean Water Level
-    min_value1 = mean_wl['x'].min()
+    mssge_string = "Complete"
+    try:
+        #Hydroweb Observed Data
+        mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+        mean_wl.set_index('x', inplace=True)
 
-    if min_value1 >= 0:
-        min_value1 = 0
+        mean_wl.index = pd.to_datetime(mean_wl.index)
 
-    mean_adjusted = mean_wl - min_value1
+        min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+        min_wl.set_index('x', inplace=True)
+        min_wl.index = pd.to_datetime(min_wl.index)
+        
+        max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+        max_wl.set_index('x', inplace=True)
+        max_wl.index = pd.to_datetime(max_wl.index)
 
-    #Min Water Level
-    min_value2 = min_wl['x'].min()
+        #Mean Water Level
+        min_value1 = mean_wl['y'].min()
+        if min_value1 >= 0:
+            min_value1 = 0
 
-    if min_value2 >= 0:
-        min_value2 = 0
+        mean_adjusted = mean_wl - min_value1
 
-    min_adjusted = min_wl - min_value2
+        #Min Water Level
+        min_value2 = min_wl['y'].min()
 
-    #Max Water Level
-    min_value3 = max_wl['x'].min()
+        if min_value2 >= 0:
+            min_value2 = 0
 
-    if min_value3 >= 0:
-        min_value3 = 0
+        min_adjusted = min_wl - min_value2
 
-    max_adjusted = max_wl - min_value3
+        #Max Water Level
+        min_value3 = max_wl['y'].min()
 
-    #Geoglows Historical Simulation Data
-    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}'))
+        if min_value3 >= 0:
+            min_value3 = 0
 
-    #Bias Correction 
+        max_adjusted = max_wl - min_value3
 
-    #Mean Water Level
-    corrected_mean_wl = geoglows.bias.correct_historical(simulated_df, mean_adjusted)
-    corrected_mean_wl = corrected_mean_wl + min_value1
+        #Geoglows Historical Simulation Data
+        simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
+        print(simulated_df)
+        #Bias Correction 
 
-    #Min Water Level
-    corrected_min_wl = geoglows.bias.correct_historical(simulated_df, min_adjusted)
-    corrected_min_wl = corrected_min_wl + min_value2
+        #Mean Water Level
+        corrected_mean_wl = geoglows.bias.correct_historical(simulated_df, mean_adjusted)
+        corrected_mean_wl = corrected_mean_wl + min_value1
 
-    #Max Water Level
-    corrected_max_wl = geoglows.bias.correct_historical(simulated_df, max_adjusted)
-    corrected_max_wl = corrected_max_wl + min_value3
+        #Min Water Level
+        corrected_min_wl = geoglows.bias.correct_historical(simulated_df, min_adjusted)
+        corrected_min_wl = corrected_min_wl + min_value2
 
-    #Save the bias corrected data locally
-    corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean'))
-    corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min'))
-    corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max'))
-    
+        #Max Water Level
+        corrected_max_wl = geoglows.bias.correct_historical(simulated_df, max_adjusted)
+        corrected_max_wl = corrected_max_wl + min_value3
+
+        #Save the bias corrected data locally
+        corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
+        corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
+        corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
+        channel_layer = get_channel_layer()
+        
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Bias_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except Exception as e:
+        print("bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Bias_Data_Downloaded_Error",
+                
+            },
+        )   
     # mssge_string = "Plot_Data"
     # json_obj["data"] = simulated_json
     # json_obj["mssg"] = "complete"
@@ -457,4 +488,31 @@ async def bias_correction(product,reach_id):
     #     "notifications_hydroweb",
     #     json_obj,
     # )
-    pass
+    return mssge_string
+
+
+def retrieve_data_bias_corrected(data_id,product):
+    json_obj = {}
+    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
+    # Removing Negative Values
+    simulated_df[simulated_df < 0] = 0
+    simulated_df.index = pd.to_datetime(simulated_df.index)
+    simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
+    simulated_df.index = pd.to_datetime(simulated_df.index)
+    simulated_df = simulated_df.reset_index()
+    # print("hola")
+    print(simulated_df)
+    simulated_df = simulated_df.rename(columns={'index': 'x', 'streamflow_m^3/s': 'y'})
+    simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
+
+    simulated_json = simulated_df.to_json(orient='records')
+
+    mssge_string = "Plot_Data"
+    json_obj["data"] = simulated_json
+    json_obj["mssg"] = "complete"
+    json_obj['type'] = 'data_notifications'
+    json_obj['product'] = product,
+    json_obj['reach_id'] = data_id,
+    json_obj['command'] = mssge_string
+
+    return json_obj    
