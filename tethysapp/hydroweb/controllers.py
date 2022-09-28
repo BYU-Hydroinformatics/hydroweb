@@ -446,6 +446,11 @@ async def bias_correction(product,reach_id):
         corrected_max_wl = corrected_max_wl + min_value3
 
         #Save the bias corrected data locally
+        corrected_mean_wl.index = corrected_mean_wl.index.to_series().dt.strftime("%Y-%m-%d")
+        corrected_min_wl.index = corrected_min_wl.index.to_series().dt.strftime("%Y-%m-%d")
+        corrected_max_wl.index = corrected_max_wl.index.to_series().dt.strftime("%Y-%m-%d")
+
+
         corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
         corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
         corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
@@ -499,7 +504,10 @@ def retrieve_data_bias_corrected(data_id,product):
     corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json'))
     print(corrected_df_mean)
     corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_max.json'))
+    print(corrected_df_min)
+    
     corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_min.json'))
+    print(corrected_df_max)
 
     
     # Removing Negative Values
