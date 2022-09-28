@@ -450,10 +450,26 @@ async def bias_correction(product,reach_id):
         corrected_min_wl.index = corrected_min_wl.index.to_series().dt.strftime("%Y-%m-%d")
         corrected_max_wl.index = corrected_max_wl.index.to_series().dt.strftime("%Y-%m-%d")
 
+        corrected_mean_wl = corrected_mean_wl.reset_index()
+        corrected_min_wl = corrected_min_wl.reset_index()
+        corrected_max_wl= corrected_max_wl.reset_index()
+        # corrected_mean_wl = simulated_df.rename(columns={'Corrected Simulated Streamflow': 'x', 'streamflow_m^3/s': 'y'})
+        corrected_mean_wl = corrected_mean_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        corrected_min_wl = corrected_min_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        corrected_max_wl = corrected_max_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        print(corrected_mean_wl)
 
+        # data_corrected_mean_wl = corrected_mean_wl.to_dict('records')
+        # data_corrected_min_wl = corrected_min_wl.to_dict('records')
+        # data_corrected_max_wl = corrected_max_wl.to_dict('records')
+
+        # corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
+        # corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
+        # corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
         corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
         corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
         corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
+        
         channel_layer = get_channel_layer()
         
         await channel_layer.group_send(
@@ -499,17 +515,28 @@ async def bias_correction(product,reach_id):
 def retrieve_data_bias_corrected(data_id,product):
 
 
-
+    print(data_id,product )
     json_obj = {}
-    corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json'))
+    # print(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
+    # if os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json')):
+
+    corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
     print(corrected_df_mean)
-    corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_max.json'))
+    corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_max.json'))
     print(corrected_df_min)
     
-    corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_min.json'))
+    corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_min.json'))
     print(corrected_df_max)
 
     
+    data_val = corrected_df_mean.to_dict('records')
+    data_max = corrected_df_max.to_dict('records')
+    data_min = corrected_df_min.to_dict('records')
+    json_obj['data'] = {
+        'val': data_val,
+        'min': data_min,
+        'max': data_max
+    }
     # Removing Negative Values
     
     
@@ -524,17 +551,14 @@ def retrieve_data_bias_corrected(data_id,product):
 
     # simulated_json = simulated_df.to_json(orient='records')
 
-    # mssge_string = "Plot_Data"
+    mssge_string = "Plot_Bias_Corrected_Data"
     # json_obj["data"] = simulated_json
-    # json_obj["mssg"] = "complete"
-    # json_obj['type'] = 'data_notifications'
-    # json_obj['product'] = product,
-    # json_obj['reach_id'] = data_id,
-    # json_obj['command'] = mssge_string
+    json_obj["mssg"] = "complete"
+    json_obj['type'] = 'data_notifications'
+    json_obj['product'] = product,
+    json_obj['reach_id'] = data_id,
+    json_obj['command'] = mssge_string
 
-    # data_val = df_val.to_dict('records')
-    # data_max = df_max.to_dict('records')
-    # data_min = df_min.to_dict('records')
 
 
     # # data_dict = data_df.to_dict('records')
