@@ -575,7 +575,7 @@ def retrieve_data_bias_corrected(data_id,product):
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
-def extrapolateForecast(request):
+def saveForecastData(request):
     print("success")
     reach_id = request.data.get('reach_id')
     product = request.data.get('product')
@@ -749,8 +749,6 @@ async def forecast_api_call(api_base_url,reach_id,product):
         print("api_call error 2")
         print(e)
     return mssge_string
-
-
 
 
 def gumbel_1(std: float, xbar: float, rp: int or float) -> float:

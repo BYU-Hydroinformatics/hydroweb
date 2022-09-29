@@ -51,6 +51,11 @@ class Hydroweb(TethysAppBase):
                 controller='hydroweb.controllers.executeBiasCorrection'
             ),
             UrlMap(
+                name='saveForecastData',
+                url='saveForecastData/',
+                controller='hydroweb.controllers.saveForecastData'
+            ),
+            UrlMap(
                 name='data_notification',
                 url='data-notification/notifications',
                 controller='hydroweb.consumers.DataConsumer',
