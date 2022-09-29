@@ -1,3 +1,5 @@
 corrected_data/*
 observed_data/*
 simulated_data/*
+forecast_data/*
+ensemble_forecast_data/*

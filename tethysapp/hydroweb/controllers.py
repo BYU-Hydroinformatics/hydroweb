@@ -1,6 +1,6 @@
 from django.shortcuts import render
 from tethys_sdk.permissions import login_required
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 import requests
 import json
 import pandas as pd
@@ -8,16 +8,15 @@ from .app import Hydroweb as app
 from rest_framework.decorators import api_view,authentication_classes, permission_classes
 from django.test.client import Client
 from .model import River, Lake
-import geopandas as gpd
-from sqlalchemy.orm import sessionmaker
 import io
 import os
 import geoglows
-from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import asyncio
 import httpx
 import traceback
+import math
+
 
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
@@ -571,4 +570,200 @@ def retrieve_data_bias_corrected(data_id,product):
     # }
     
 
-    return json_obj    
+    return json_obj
+
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([])
+def extrapolateForecast(request):
+    print("success")
+    reach_id = request.data.get('reach_id')
+    product = request.data.get('product')
+
+    response = "executing"
+    try:
+        api_base_url = 'https://geoglows.ecmwf.int/api'        
+        asyncio.run(make_forecast_api_calls(api_base_url,reach_id,product))
+
+    except Exception as e:
+        print('saveHistoricalSimulationData error')
+        print(e)
+        print(traceback.format_exc())
+    finally:
+        print('finally')   
+    
+    return JsonResponse({'state':response })
+
+async def make_forecast_api_calls(api_base_url,reach_id,product):
+    list_async_task = []
+    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
+        task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
+    else:
+        task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
+    list_async_task.append(task_get_forecast_ensembles_geoglows_data)
+    
+    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json')):
+        task_get_forecast_geoglows_data = await asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
+    else:
+        task_get_forecast_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Data_Downloaded"))
+    
+    list_async_task.append(task_get_forecast_geoglows_data)
+    
+    results = asyncio.gather(*list_async_task)
+
+    return
+
+
+async def fake_print_custom(api_base_url,reach_id,product,command):
+    print(f'{command} request at {api_base_url},for {reach_id} already saved')
+    await asyncio.sleep(1) # Mimic some network delay
+    channel_layer = get_channel_layer()
+   
+    await channel_layer.group_send(
+        "notifications_hydroweb",
+        {
+            "type": "simple_notifications",
+            "reach_id": reach_id,
+            "product": product,
+            "mssg": "Complete",
+            "command": command,
+
+        },
+    )
+    return 0
+
+
+async def forecast_ensembles_api_call(api_base_url,reach_id,product):
+    mssge_string = "Complete"
+    channel_layer = get_channel_layer()
+    print(reach_id)
+    print(f"{api_base_url}/ForecastEnsembles/")
+    try:
+        response_await = await async_client.get(
+                    url = f"{api_base_url}/ForecastEnsembles/",
+                    params = {
+                        "reach_id": reach_id
+                    },
+                    timeout=None          
+        )
+
+        # response = response_await.json()
+        print(response_await)
+        # print(response_await.text)
+        forecast_ens = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+        forecast_ens.index = pd.to_datetime(forecast_ens.index)
+        forecast_ens[forecast_ens < 0] = 0
+        forecast_ens.index = forecast_ens.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+        forecast_ens.index = pd.to_datetime(forecast_ens.index)
+        
+        forecast_ens.to_json(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json'))
+
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Ensemble_Forecast_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except httpx.HTTPError as exc:
+
+        print("api_call error")
+        print(f"Error while requesting {exc.request.url!r}.")
+
+        print(str(exc.__class__.__name__))
+        mssge_string = "incomplete"
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Ensemble_Forecast_Data_Downloaded_Error",
+                
+            },
+        )
+    except Exception as e:
+        print("api_call error 2")
+        print(e)
+    return mssge_string
+
+
+async def forecast_api_call(api_base_url,reach_id,product):
+    mssge_string = "Complete"
+    channel_layer = get_channel_layer()
+    print(reach_id)
+    print(f"{api_base_url}/ForecastRecords/")
+    try:
+        response_await = await async_client.get(
+                    url = f"{api_base_url}/ForecastRecords/",
+                    params = {
+                        "reach_id": reach_id
+                    },
+                    timeout=None          
+        )
+
+        # response = response_await.json()
+        print(response_await)
+        # print(response_await.text)
+        forecast_records = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+        forecast_records.index = pd.to_datetime(forecast_records.index)
+        forecast_records[forecast_records < 0] = 0
+        forecast_records.index = forecast_records.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+        forecast_records.index = pd.to_datetime(forecast_records.index)
+        
+        forecast_records.to_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
+
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Forecast_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except httpx.HTTPError as exc:
+
+        print("api_call error")
+        print(f"Error while requesting {exc.request.url!r}.")
+
+        print(str(exc.__class__.__name__))
+        mssge_string = "incomplete"
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Forecast_Data_Downloaded_Error",
+                
+            },
+        )
+    except Exception as e:
+        print("api_call error 2")
+        print(e)
+    return mssge_string
+
+
+
+
+def gumbel_1(std: float, xbar: float, rp: int or float) -> float:
+  """
+  Solves the Gumbel Type I probability distribution function (pdf) = exp(-exp(-b)) where b is the covariate. Provide
+  the standard deviation and mean of the list of annual maximum flows. Compare scipy.stats.gumbel_r
+  Args:
+    std (float): the standard deviation of the series
+    xbar (float): the mean of the series
+    rp (int or float): the return period in years
+  Returns:
+    float, the flow corresponding to the return period specified
+  """
+  # xbar = statistics.mean(year_max_flow_list)
+  # std = statistics.stdev(year_max_flow_list, xbar=xbar)
+  return -math.log(-math.log(1 - (1 / rp))) * std * .7797 + xbar - (.45 * std)
