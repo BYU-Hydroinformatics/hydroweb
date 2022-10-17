@@ -8,7 +8,7 @@ class Hydroweb(TethysAppBase):
     """
 
     name = 'Hydroweb'
-    index = 'hydroweb:home'
+    index = 'home'
     icon = 'hydroweb/images/icon.gif'
     package = 'hydroweb'
     root_url = 'hydroweb'
@@ -18,52 +18,52 @@ class Hydroweb(TethysAppBase):
     enable_feedback = False
     feedback_emails = []
 
-    def url_maps(self):
-        """
-        Add controllers
-        """
-        UrlMap = url_map_maker(self.root_url)
+    # def url_maps(self):
+    #     """
+    #     Add controllers
+    #     """
+    #     UrlMap = url_map_maker(self.root_url)
 
-        url_maps = (
-            UrlMap(
-                name='home',
-                url='hydroweb',
-                controller='hydroweb.controllers.home'
-            ),
-            UrlMap(
-                name='getVirtualStationData',
-                url='getVirtualStationData/',
-                controller='hydroweb.controllers.getVirtualStationData'
-            ),
-            UrlMap(
-                name='getVirtualStations',
-                url='getVirtualStations/',
-                controller='hydroweb.controllers.virtual_stations'
-            ),
-            UrlMap(
-                name='saveHistoricalSimulationData',
-                url='saveHistoricalSimulationData/',
-                controller='hydroweb.controllers.saveHistoricalSimulationData'
-            ),
-            UrlMap(
-                name='executeBiasCorrection',
-                url='executeBiasCorrection/',
-                controller='hydroweb.controllers.executeBiasCorrection'
-            ),
-            UrlMap(
-                name='saveForecastData',
-                url='saveForecastData/',
-                controller='hydroweb.controllers.saveForecastData'
-            ),
-            UrlMap(
-                name='data_notification',
-                url='data-notification/notifications',
-                controller='hydroweb.consumers.DataConsumer',
-                protocol='websocket'
-            ),
-        )
+    #     url_maps = (
+    #         UrlMap(
+    #             name='home',
+    #             url='hydroweb',
+    #             controller='hydroweb.controllers.home'
+    #         ),
+    #         UrlMap(
+    #             name='getVirtualStationData',
+    #             url='getVirtualStationData/',
+    #             controller='hydroweb.controllers.getVirtualStationData'
+    #         ),
+    #         UrlMap(
+    #             name='getVirtualStations',
+    #             url='getVirtualStations/',
+    #             controller='hydroweb.controllers.virtual_stations'
+    #         ),
+    #         UrlMap(
+    #             name='saveHistoricalSimulationData',
+    #             url='saveHistoricalSimulationData/',
+    #             controller='hydroweb.controllers.saveHistoricalSimulationData'
+    #         ),
+    #         UrlMap(
+    #             name='executeBiasCorrection',
+    #             url='executeBiasCorrection/',
+    #             controller='hydroweb.controllers.executeBiasCorrection'
+    #         ),
+    #         UrlMap(
+    #             name='saveForecastData',
+    #             url='saveForecastData/',
+    #             controller='hydroweb.controllers.saveForecastData'
+    #         ),
+    #         UrlMap(
+    #             name='data_notification',
+    #             url='data-notification/notifications',
+    #             controller='hydroweb.consumers.DataConsumer',
+    #             protocol='websocket'
+    #         ),
+    #     )
 
-        return url_maps
+    #     return url_maps
 
 
     def custom_settings(self):

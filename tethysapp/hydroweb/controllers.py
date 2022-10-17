@@ -16,11 +16,12 @@ import asyncio
 import httpx
 import traceback
 import math
-
+from tethys_sdk.routing import controller
 
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
 
+@controller(name='home',url='hydroweb')
 @login_required()
 def home(request):
     client = Client(SERVER_NAME='localhost')
@@ -31,6 +32,9 @@ def home(request):
 
     return render(request, 'hydroweb/home.html', context)
 
+
+
+@controller(name='getVirtualStationData',url='getVirtualStationData/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
@@ -95,6 +99,8 @@ def getVirtualStationData(request):
         resp_obj['data'] = data_dict
     return JsonResponse(resp_obj)
 
+
+@controller(name='getVirtualStations',url='getVirtualStations/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
@@ -156,6 +162,7 @@ def virtual_stations(request):
     return JsonResponse(geojson_stations)
 
 
+@controller(name='saveHistoricalSimulationData',url='saveHistoricalSimulationData/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
@@ -360,7 +367,7 @@ async def make_bias_correction(reach_id,product):
 
     return task_get_bias_geoglows_data
 
-
+@controller(name='executeBiasCorrection',url='executeBiasCorrection/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
@@ -572,6 +579,8 @@ def retrieve_data_bias_corrected(data_id,product):
 
     return json_obj
 
+
+@controller(name='saveForecastData',url='saveForecastData/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
@@ -599,19 +608,19 @@ async def make_forecast_api_calls(api_base_url,reach_id,product):
     if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
         task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
     else:
-        task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
-    list_async_task.append(task_get_forecast_ensembles_geoglows_data)
+        task_get_forecast_ensembles_geoglows_data =  await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
+    # list_async_task.append(task_get_forecast_ensembles_geoglows_data)
     
     if not os.path.exists(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json')):
-        task_get_forecast_geoglows_data = await asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
+        task_get_forecast_geoglows_data =  await asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
     else:
         task_get_forecast_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Data_Downloaded"))
     
-    list_async_task.append(task_get_forecast_geoglows_data)
+    # list_async_task.append(task_get_forecast_geoglows_data)
     
-    results = asyncio.gather(*list_async_task)
+    results = await asyncio.gather([task_get_forecast_ensembles_geoglows_data,task_get_forecast_geoglows_data])
 
-    return
+    return results
 
 
 async def fake_print_custom(api_base_url,reach_id,product,command):
@@ -630,7 +639,7 @@ async def fake_print_custom(api_base_url,reach_id,product,command):
 
         },
     )
-    return 0
+    # return  0
 
 
 async def forecast_ensembles_api_call(api_base_url,reach_id,product):
@@ -689,7 +698,7 @@ async def forecast_ensembles_api_call(api_base_url,reach_id,product):
     except Exception as e:
         print("api_call error 2")
         print(e)
-    return mssge_string
+    # return await mssge_string
 
 
 async def forecast_api_call(api_base_url,reach_id,product):
@@ -748,7 +757,7 @@ async def forecast_api_call(api_base_url,reach_id,product):
     except Exception as e:
         print("api_call error 2")
         print(e)
-    return mssge_string
+    # return await mssge_string
 
 
 def gumbel_1(std: float, xbar: float, rp: int or float) -> float:
