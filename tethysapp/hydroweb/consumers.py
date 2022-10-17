@@ -5,7 +5,7 @@ from .controllers import retrieve_data, retrieve_data_bias_corrected
 from asgiref.sync import async_to_sync
 
 from tethys_sdk.routing import consumer
-@consumer(name='data_notification',url='data-notification/notifications')
+@consumer(name='data_notification',url='hydroweb/data-notification/notifications')
 class DataConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):

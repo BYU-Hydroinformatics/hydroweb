@@ -17,6 +17,7 @@ import httpx
 import traceback
 import math
 from tethys_sdk.routing import controller
+from django.views.decorators.csrf import csrf_exempt
 
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
@@ -24,20 +25,20 @@ async_client = httpx.AsyncClient()
 @controller(name='home',url='hydroweb')
 @login_required()
 def home(request):
-    client = Client(SERVER_NAME='localhost')
-    resp = client.get('/getVirtualStationData/', data={'product': 'R_MAGDALENA-2_MAGDALENA_KM0839'}, follow=True)
+    # client = Client(SERVER_NAME='localhost')
+    # resp = client.get('/getVirtualStationData/', data={'product': 'R_MAGDALENA-2_MAGDALENA_KM0839'}, follow=True)
 
-    print(resp)
+    # print(resp)
     context = {}
 
     return render(request, 'hydroweb/home.html', context)
 
 
 
-@controller(name='getVirtualStationData',url='getVirtualStationData/')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
+@controller(name='getVirtualStationData',url='hydroweb/getVirtualStationData')
 def getVirtualStationData(request):
     print(request)
     resp_obj = {}
@@ -100,10 +101,11 @@ def getVirtualStationData(request):
     return JsonResponse(resp_obj)
 
 
-@controller(name='getVirtualStations',url='getVirtualStations/')
 @api_view(['GET', 'POST'])
+@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
+@controller(name='getVirtualStations',url='hydroweb/getVirtualStations')
 def virtual_stations(request):
     geojson_stations = {}
 
@@ -161,12 +163,12 @@ def virtual_stations(request):
     
     return JsonResponse(geojson_stations)
 
-
-@controller(name='saveHistoricalSimulationData',url='saveHistoricalSimulationData/')
+# we need to check how to enable all middleware to have asynch views 
 @api_view(['GET', 'POST'])
+@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-# we need to check how to enable all middleware to have asynch views 
+@controller(name='saveHistoricalSimulationData',url='hydroweb/saveHistoricalSimulationData')
 def saveHistoricalSimulationData(request):
     print("success")
     reach_id = request.data.get('reach_id')
@@ -367,11 +369,12 @@ async def make_bias_correction(reach_id,product):
 
     return task_get_bias_geoglows_data
 
-@controller(name='executeBiasCorrection',url='executeBiasCorrection/')
+# we need to check how to enable all middleware to have asynch views 
 @api_view(['GET', 'POST'])
+@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-# we need to check how to enable all middleware to have asynch views 
+@controller(name='executeBiasCorrection',url='hydroweb/executeBiasCorrection')
 def executeBiasCorrection(request):
     print("success")
     reach_id = request.data.get('reach_id')
@@ -580,10 +583,11 @@ def retrieve_data_bias_corrected(data_id,product):
     return json_obj
 
 
-@controller(name='saveForecastData',url='saveForecastData/')
 @api_view(['GET', 'POST'])
+@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
+@controller(name='saveForecastData',url='hydroweb/saveForecastData')
 def saveForecastData(request):
     print("success")
     reach_id = request.data.get('reach_id')

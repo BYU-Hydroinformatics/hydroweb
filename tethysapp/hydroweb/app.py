@@ -1,4 +1,5 @@
 from tethys_sdk.base import TethysAppBase, url_map_maker
+from tethys_apps.base.workspace import _get_app_workspace
 
 from tethys_sdk.app_settings import CustomSetting, PersistentStoreDatabaseSetting
 
@@ -101,3 +102,7 @@ class Hydroweb(TethysAppBase):
         )
 
         return stores
+
+    @classmethod
+    def get_app_workspace(cls):
+        return _get_app_workspace(cls)
