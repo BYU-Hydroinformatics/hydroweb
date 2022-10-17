@@ -18,6 +18,8 @@ class Hydroweb(TethysAppBase):
     enable_feedback = False
     feedback_emails = []
 
+    controller_modules = ['controllers', 'consumers', ]
+
     # def url_maps(self):
     #     """
     #     Add controllers
