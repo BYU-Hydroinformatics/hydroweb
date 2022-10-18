@@ -35,10 +35,10 @@ def home(request):
 
 
 
+@controller(name='getVirtualStationData',url='hydroweb/getVirtualStationData')
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
-@controller(name='getVirtualStationData',url='hydroweb/getVirtualStationData')
 def getVirtualStationData(request):
     print(request)
     resp_obj = {}
@@ -101,11 +101,10 @@ def getVirtualStationData(request):
     return JsonResponse(resp_obj)
 
 
+@controller(name='getVirtualStations',url='hydroweb/getVirtualStations')
 @api_view(['GET', 'POST'])
-@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-@controller(name='getVirtualStations',url='hydroweb/getVirtualStations')
 def virtual_stations(request):
     geojson_stations = {}
 
@@ -163,12 +162,11 @@ def virtual_stations(request):
     
     return JsonResponse(geojson_stations)
 
-# we need to check how to enable all middleware to have asynch views 
+# we need to check how to enable all middleware to have asynch views
+@controller(name='saveHistoricalSimulationData',url='hydroweb/saveHistoricalSimulationData') 
 @api_view(['GET', 'POST'])
-@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-@controller(name='saveHistoricalSimulationData',url='hydroweb/saveHistoricalSimulationData')
 def saveHistoricalSimulationData(request):
     print("success")
     reach_id = request.data.get('reach_id')
@@ -369,12 +367,11 @@ async def make_bias_correction(reach_id,product):
 
     return task_get_bias_geoglows_data
 
-# we need to check how to enable all middleware to have asynch views 
+# we need to check how to enable all middleware to have asynch views
+@controller(name='executeBiasCorrection',url='hydroweb/executeBiasCorrection') 
 @api_view(['GET', 'POST'])
-@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-@controller(name='executeBiasCorrection',url='hydroweb/executeBiasCorrection')
 def executeBiasCorrection(request):
     print("success")
     reach_id = request.data.get('reach_id')
@@ -582,12 +579,10 @@ def retrieve_data_bias_corrected(data_id,product):
 
     return json_obj
 
-
+@controller(name='saveForecastData',url='hydroweb/saveForecastData')
 @api_view(['GET', 'POST'])
-@csrf_exempt
 @authentication_classes([])
 @permission_classes([])
-@controller(name='saveForecastData',url='hydroweb/saveForecastData')
 def saveForecastData(request):
     print("success")
     reach_id = request.data.get('reach_id')
