@@ -1,34 +1,40 @@
 from django.shortcuts import render
 from tethys_sdk.permissions import login_required
 from django.http import JsonResponse
-import requests
-import json
-import pandas as pd
 from .app import Hydroweb as app
 from rest_framework.decorators import api_view,authentication_classes, permission_classes
 from django.test.client import Client
 from .model import River, Lake
+from tethys_sdk.routing import controller
+from channels.layers import get_channel_layer
+from tethysext.hydroviewer.controllers.utilities import Utilities
+from tethysext.hydroviewer.model import ForecastRecords, HistoricalSimulation, ReturnPeriods
+from asgiref.sync import sync_to_async
+from .model import cache_historical_data
+
+import requests
+import json
+import pandas as pd
 import io
 import os
 import geoglows
-from channels.layers import get_channel_layer
 import asyncio
 import httpx
 import traceback
 import math
-from tethys_sdk.routing import controller
-from django.views.decorators.csrf import csrf_exempt
+
+
+
 
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
-
+hydroviewer_utility_object = Utilities() 
+SessionMaker = app.get_persistent_store_database("virtual_stations", as_sessionmaker=True)
+session = SessionMaker()
 @controller(name='home',url='hydroweb')
 @login_required()
 def home(request):
-    # client = Client(SERVER_NAME='localhost')
-    # resp = client.get('/getVirtualStationData/', data={'product': 'R_MAGDALENA-2_MAGDALENA_KM0839'}, follow=True)
 
-    # print(resp)
     context = {}
 
     return render(request, 'hydroweb/home.html', context)
@@ -215,8 +221,12 @@ def saveHistoricalSimulationData(request):
 
 async def make_api_calls(api_base_url,reach_id,product):
     print("here")
-    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json')):
+    historical_simulation_query = session.query(HistoricalSimulation).filter(HistoricalSimulation.reach_id == reach_id)
+    if historical_simulation_query.first() is None:
+
+    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json')):
         task_get_geoglows_data = await asyncio.create_task(api_call(api_base_url,reach_id,product))
+    
     else:
         task_get_geoglows_data = await asyncio.create_task(fake_print(api_base_url,reach_id,product))
 
@@ -248,6 +258,7 @@ async def api_call(api_base_url,reach_id,product):
     channel_layer = get_channel_layer()
     print(reach_id)
     print(f"{api_base_url}/HistoricSimulation/")
+
     try:
         response_await = await async_client.get(
                     url = f"{api_base_url}/HistoricSimulation/",
@@ -258,12 +269,18 @@ async def api_call(api_base_url,reach_id,product):
         )
 
         # response = response_await.json()
-        print(response_await)
+        # print(response_await)
         # print(response_await.text)
-        simulated_df = pd.read_csv(io.StringIO(response_await.text), index_col=0)
-        simulated_df[simulated_df < 0] = 0
 
-        simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
+        print("saving data bro")
+        simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,api_base_url,reach_id,session,response_content=response_await.text)
+        print(simulated_df.head)
+        session.close()
+
+        # simulated_df = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+        # simulated_df[simulated_df < 0] = 0
+
+        # simulated_df.to_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
 
         await channel_layer.group_send(
             "notifications_hydroweb",
@@ -313,17 +330,21 @@ async def api_call(api_base_url,reach_id,product):
 
 def retrieve_data(data_id,product):
     json_obj = {}
-    simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
-    # Removing Negative Values
-    simulated_df[simulated_df < 0] = 0
-    simulated_df.index = pd.to_datetime(simulated_df.index)
-    simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
-    simulated_df.index = pd.to_datetime(simulated_df.index)
+    print("retriving data bro")
+
+    simulated_df = hydroviewer_utility_object.cache_historical_simulation(active_app=app,cs_api_source=None,comid=data_id, session=session,response_content=None)
+    session.close()
+
+    # simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{data_id}.json'))
+    # # Removing Negative Values
+    # simulated_df[simulated_df < 0] = 0
+    # simulated_df.index = pd.to_datetime(simulated_df.index)
+    # simulated_df.index = simulated_df.index.to_series().dt.strftime("%Y-%m-%d")
+    # simulated_df.index = pd.to_datetime(simulated_df.index)
     simulated_df = simulated_df.reset_index()
-    # print("hola")
     print(simulated_df)
-    simulated_df = simulated_df.rename(columns={'index': 'x', 'streamflow_m^3/s': 'y'})
-    simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
+    simulated_df = simulated_df.rename(columns={'datetime': 'x', 'streamflow_m^3/s': 'y'})
+    # simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
 
     simulated_json = simulated_df.to_json(orient='records')
 
@@ -394,6 +415,7 @@ def executeBiasCorrection(request):
     return JsonResponse({'state':response })
 
 async def bias_correction(product,reach_id):
+    channel_layer = get_channel_layer()
     
     mssge_string = "Complete"
     try:
@@ -435,8 +457,14 @@ async def bias_correction(product,reach_id):
         max_adjusted = max_wl - min_value3
 
         #Geoglows Historical Simulation Data
-        simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
-        print(simulated_df)
+        simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
+        simulated_df.index = pd.to_datetime(simulated_df.index)
+
+        # print("from caache")
+        # print(simulated_df)
+        # simulated_df = pd.read_json(os.path.join(app.get_app_workspace().path,f'simulated_data/{reach_id}.json'))
+        # print("from file")
+        # print(simulated_df)
         #Bias Correction 
 
         #Mean Water Level
@@ -460,24 +488,29 @@ async def bias_correction(product,reach_id):
         corrected_min_wl = corrected_min_wl.reset_index()
         corrected_max_wl= corrected_max_wl.reset_index()
         # corrected_mean_wl = simulated_df.rename(columns={'Corrected Simulated Streamflow': 'x', 'streamflow_m^3/s': 'y'})
-        corrected_mean_wl = corrected_mean_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
-        corrected_min_wl = corrected_min_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
-        corrected_max_wl = corrected_max_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        # corrected_mean_wl = corrected_mean_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        # corrected_min_wl = corrected_min_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
+        # corrected_max_wl = corrected_max_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
         print(corrected_mean_wl)
 
-        # data_corrected_mean_wl = corrected_mean_wl.to_dict('records')
-        # data_corrected_min_wl = corrected_min_wl.to_dict('records')
-        # data_corrected_max_wl = corrected_max_wl.to_dict('records')
 
-        # corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
-        # corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
-        # corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
         corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
         corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
         corrected_max_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_max.json'))
         
-        channel_layer = get_channel_layer()
         
+        corrected_mean_wl = corrected_mean_wl.rename(columns={'index': 'datetime', 'Corrected Simulated Streamflow': 'stream_flow'})
+        # breakpoint()
+        cache_historical_data(corrected_mean_wl,reach_id,"corrected_mean",session=session)
+        # breakpoint()
+        corrected_min_wl = corrected_min_wl.rename(columns={'index': 'datetime', 'Corrected Simulated Streamflow': 'stream_flow'})
+        
+        cache_historical_data(corrected_min_wl,reach_id,"corrected_min",session=session)
+        corrected_max_wl = corrected_max_wl.rename(columns={'index': 'datetime', 'Corrected Simulated Streamflow': 'stream_flow'})
+        cache_historical_data(corrected_max_wl,reach_id,"corrected_max",session=session)
+
+
+
         await channel_layer.group_send(
             "notifications_hydroweb",
             {
@@ -527,12 +560,28 @@ def retrieve_data_bias_corrected(data_id,product):
     # if os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json')):
 
     corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
-    print(corrected_df_mean)
+    # print(corrected_df_mean)
     corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_max.json'))
-    print(corrected_df_min)
+    # print(corrected_df_min)
     
     corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_min.json'))
-    print(corrected_df_max)
+    # print(corrected_df_max)
+    breakpoint()
+    corrected_df_mean  = cache_historical_data(data_df=None,comid=data_id,type_data="corrected_mean",session=session)
+    corrected_df_mean = corrected_df_mean.reset_index()
+
+    corrected_df_mean = corrected_df_mean.rename(columns={'datetime': 'x', 'stream_flow': 'y'})
+    
+    corrected_df_min  = cache_historical_data(data_df=None,comid=data_id,type_data="corrected_min",session=session)
+    corrected_df_min = corrected_df_min.reset_index()
+
+    corrected_df_min = corrected_df_min.rename(columns={'datetime': 'x', 'stream_flow': 'y'})
+
+    corrected_df_max  = cache_historical_data(data_df=None,comid=data_id,type_data="corrected_max",session=session)
+    corrected_df_max = corrected_df_max.reset_index()
+
+    corrected_df_max = corrected_df_max.rename(columns={'datetime': 'x', 'stream_flow': 'y'})
+    breakpoint()
 
     
     data_val = corrected_df_mean.to_dict('records')
@@ -604,6 +653,8 @@ def saveForecastData(request):
 
 async def make_forecast_api_calls(api_base_url,reach_id,product):
     list_async_task = []
+    # forecast_records_query = session.query(ForecastRecords).filter(ForecastRecords.reach_id == comid)
+
     if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
         task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
     else:

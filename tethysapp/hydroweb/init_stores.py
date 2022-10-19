@@ -1,19 +1,23 @@
 # Put your persistent store initializer functions in here
 import os
+import geopandas as gpd
+
 from sqlalchemy.orm import sessionmaker
 from .model import Base, Lake, River
-
 from requests import Request
-import geopandas as gpd
+from tethysext.hydroviewer.model import HydroviewerExtensionBase
 from geoalchemy2 import Geometry, WKTElement
 from .app import Hydroweb as app
+
 
 def init_flooded_addresses_db(engine,first_time):
     """
     Initialize the flooded addresses database.
     """
+    HydroviewerExtensionBase.metadata.create_all(engine)
+
     # STEP 1: Create database tables
-    Base.metadata.create_all(engine)
+    Base.metadata.create_all(engine);
     # STEP 2: Add data to the database
     if first_time:
         print("initializing database")
