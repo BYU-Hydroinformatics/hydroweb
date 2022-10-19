@@ -10,7 +10,7 @@ from channels.layers import get_channel_layer
 from tethysext.hydroviewer.controllers.utilities import Utilities
 from tethysext.hydroviewer.model import ForecastRecords, HistoricalSimulation, ReturnPeriods
 from asgiref.sync import sync_to_async
-from .model import cache_historical_data
+from .model import cache_historical_data, cache_hydroweb_data
 
 import requests
 import json
@@ -23,14 +23,17 @@ import httpx
 import traceback
 import math
 
-
-
-
 Persistent_Store_Name = 'virtual_stations'
 async_client = httpx.AsyncClient()
-hydroviewer_utility_object = Utilities() 
-SessionMaker = app.get_persistent_store_database("virtual_stations", as_sessionmaker=True)
-session = SessionMaker()
+hydroviewer_utility_object = Utilities()
+
+try: 
+    SessionMaker = app.get_persistent_store_database("virtual_stations", as_sessionmaker=True)
+    session = SessionMaker()
+except Exception as e:
+    print("assign database")
+
+
 @controller(name='home',url='hydroweb')
 @login_required()
 def home(request):
@@ -52,58 +55,60 @@ def getVirtualStationData(request):
     user = app.get_custom_setting('Hydroweb Username')
     pwd = app.get_custom_setting('Hydroweb Password')
     url= f'https://hydroweb.theia-land.fr/hydroweb/authdownload?products={product}&format=json&user={user}&pwd={pwd}'
-    print(url)
-    response= requests.get(url)
-    json_obj = json.loads(response.text)
-    data_obj = json_obj['data']
-    resp_obj['geometry'] = json_obj['geometry']
-    resp_obj['properties'] = json_obj['properties']
-    # print(data_obj)
-    df = pd.DataFrame.from_dict(data_obj)
-    if product.startswith('R'):
+
+    resp_obj = cache_hydroweb_data(product,url,session)
+
+    # response= requests.get(url)
+    # json_obj = json.loads(response.text)
+    # data_obj = json_obj['data']
+    # resp_obj['geometry'] = json_obj['geometry']
+    # resp_obj['properties'] = json_obj['properties']
+    # # print(data_obj)
+    # df = pd.DataFrame.from_dict(data_obj)
+    # if product.startswith('R'):
         
-        data_df = df[['date', 'orthometric_height_of_water_surface_at_reference_position', 'associated_uncertainty']].copy()
-        data_df ["up_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] + data_df['associated_uncertainty']
-        data_df ["down_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] - data_df['associated_uncertainty']
+    #     data_df = df[['date', 'orthometric_height_of_water_surface_at_reference_position', 'associated_uncertainty']].copy()
+    #     data_df ["up_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] + data_df['associated_uncertainty']
+    #     data_df ["down_uncertainty"] = data_df['orthometric_height_of_water_surface_at_reference_position'] - data_df['associated_uncertainty']
         
-        df_val = data_df[['date', 'orthometric_height_of_water_surface_at_reference_position']].copy()
-        df_val = df_val.rename(columns={'date': 'x', 'orthometric_height_of_water_surface_at_reference_position': 'y'})
+    #     df_val = data_df[['date', 'orthometric_height_of_water_surface_at_reference_position']].copy()
+    #     df_val = df_val.rename(columns={'date': 'x', 'orthometric_height_of_water_surface_at_reference_position': 'y'})
 
-        df_min = data_df[['date', 'down_uncertainty']].copy()
-        df_min = df_min.rename(columns={'date': 'x', 'down_uncertainty': 'y'})
+    #     df_min = data_df[['date', 'down_uncertainty']].copy()
+    #     df_min = df_min.rename(columns={'date': 'x', 'down_uncertainty': 'y'})
 
-        df_max = data_df[['date', 'up_uncertainty']].copy()
-        df_max = df_max.rename(columns={'date': 'x', 'up_uncertainty': 'y'})
-
-
-        data_val = df_val.to_dict('records')
-        data_max = df_max.to_dict('records')
-        data_min = df_min.to_dict('records')
+    #     df_max = data_df[['date', 'up_uncertainty']].copy()
+    #     df_max = df_max.rename(columns={'date': 'x', 'up_uncertainty': 'y'})
 
 
-        # data_dict = data_df.to_dict('records')
+    #     data_val = df_val.to_dict('records')
+    #     data_max = df_max.to_dict('records')
+    #     data_min = df_min.to_dict('records')
 
-        # resp_obj['data'] = data_dict
-        resp_obj['data'] = {
-            'val': data_val,
-            'min': data_min,
-            'max': data_max
-        }
 
-        ## saving it to the workspaces for alter use ##
-        if not os.path.exists(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json')):
-            df_val.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
-            df_max.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
-            df_min.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
-        else:
-            print("files are already saved")
+    #     # data_dict = data_df.to_dict('records')
 
-    else:
-        data_df = df[['datetime', 'water_surface_height_above_reference_datum', 'water_surface_height_uncertainty','area','volume']].copy()
-        data_df ["up_uncertainty"] = data_df['water_surface_height_above_reference_datum'] + data_df['water_surface_height_uncertainty']
-        data_df ["down_uncertainty"] = data_df['water_surface_height_above_reference_datum'] - data_df['water_surface_height_uncertainty']
-        data_dict = data_df.to_dict('records')
-        resp_obj['data'] = data_dict
+    #     # resp_obj['data'] = data_dict
+    #     resp_obj['data'] = {
+    #         'val': data_val,
+    #         'min': data_min,
+    #         'max': data_max
+    #     }
+
+    #     ## saving it to the workspaces for alter use ##
+    #     if not os.path.exists(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json')):
+    #         df_val.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+    #         df_max.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+    #         df_min.to_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+    #     else:
+    #         print("files are already saved")
+
+    # else:
+    #     data_df = df[['datetime', 'water_surface_height_above_reference_datum', 'water_surface_height_uncertainty','area','volume']].copy()
+    #     data_df ["up_uncertainty"] = data_df['water_surface_height_above_reference_datum'] + data_df['water_surface_height_uncertainty']
+    #     data_df ["down_uncertainty"] = data_df['water_surface_height_above_reference_datum'] - data_df['water_surface_height_uncertainty']
+    #     data_dict = data_df.to_dict('records')
+    #     resp_obj['data'] = data_dict
     return JsonResponse(resp_obj)
 
 
