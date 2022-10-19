@@ -663,15 +663,15 @@ def saveForecastData(request):
 
 async def make_forecast_api_calls(api_base_url,reach_id,product):
     list_async_task = []
-    # forecast_records_query = session.query(ForecastRecords).filter(ForecastRecords.reach_id == comid)
+    forecast_records_query = session.query(ForecastRecords).filter(ForecastRecords.reach_id == reach_id)
 
     if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
         task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
     else:
         task_get_forecast_ensembles_geoglows_data =  await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
     # list_async_task.append(task_get_forecast_ensembles_geoglows_data)
-    
-    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json')):
+    if forecast_records_query.first():
+    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json')):
         task_get_forecast_geoglows_data =  await asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
     else:
         task_get_forecast_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Data_Downloaded"))
@@ -778,13 +778,17 @@ async def forecast_api_call(api_base_url,reach_id,product):
         # response = response_await.json()
         print(response_await)
         # print(response_await.text)
-        forecast_records = pd.read_csv(io.StringIO(response_await.text), index_col=0)
-        forecast_records.index = pd.to_datetime(forecast_records.index)
-        forecast_records[forecast_records < 0] = 0
-        forecast_records.index = forecast_records.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+        # forecast_records = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+
+        forecast_records = hydroviewer_utility_object.cache_forecast_records(app,api_base_url,reach_id,session,response_content=response_await.text)
+
+
+        # forecast_records.index = pd.to_datetime(forecast_records.index)
+        # forecast_records[forecast_records < 0] = 0
+        # forecast_records.index = forecast_records.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
         forecast_records.index = pd.to_datetime(forecast_records.index)
         
-        forecast_records.to_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
+        # forecast_records.to_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
 
         await channel_layer.group_send(
             "notifications_hydroweb",
