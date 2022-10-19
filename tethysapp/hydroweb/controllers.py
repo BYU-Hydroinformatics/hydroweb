@@ -4,13 +4,13 @@ from django.http import JsonResponse
 from .app import Hydroweb as app
 from rest_framework.decorators import api_view,authentication_classes, permission_classes
 from django.test.client import Client
-from .model import River, Lake
+from .model import HistoricalCorrectedData, River, Lake
 from tethys_sdk.routing import controller
 from channels.layers import get_channel_layer
 from tethysext.hydroviewer.controllers.utilities import Utilities
 from tethysext.hydroviewer.model import ForecastRecords, HistoricalSimulation, ReturnPeriods
 from asgiref.sync import sync_to_async
-from .model import cache_historical_data, cache_hydroweb_data
+from .model import cache_historical_data, cache_hydroweb_data,retrive_hydroweb_river_data, HydrowebData
 
 import requests
 import json
@@ -383,9 +383,11 @@ async def fake_print2(reach_id,product):
     return 0
 
 async def make_bias_correction(reach_id,product):
-    print(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
+    historical_corrected_simulation_query = session.query(HistoricalCorrectedData).filter(HistoricalCorrectedData.reach_id == reach_id)
+    if historical_corrected_simulation_query.first() is None:
+    # print(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
 
-    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json')):
+    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json')):
         print("not here")
         task_get_bias_geoglows_data = await asyncio.create_task(bias_correction(product,reach_id))
     else:
@@ -425,16 +427,19 @@ async def bias_correction(product,reach_id):
     mssge_string = "Complete"
     try:
         #Hydroweb Observed Data
-        mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+        water_level_data_query = session.query(HydrowebData).filter(HydrowebData.hydroweb_product == product)
+        mean_wl,min_wl,max_wl = retrive_hydroweb_river_data(water_level_data_query)
+
+        # mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
         mean_wl.set_index('x', inplace=True)
 
         mean_wl.index = pd.to_datetime(mean_wl.index)
 
-        min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+        # min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
         min_wl.set_index('x', inplace=True)
         min_wl.index = pd.to_datetime(min_wl.index)
         
-        max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+        # max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
         max_wl.set_index('x', inplace=True)
         max_wl.index = pd.to_datetime(max_wl.index)
 
@@ -496,8 +501,9 @@ async def bias_correction(product,reach_id):
         # corrected_mean_wl = corrected_mean_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
         # corrected_min_wl = corrected_min_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
         # corrected_max_wl = corrected_max_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
-        print(corrected_mean_wl)
+        # print(corrected_mean_wl)
 
+        breakpoint()
 
         corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
         corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
@@ -513,7 +519,6 @@ async def bias_correction(product,reach_id):
         cache_historical_data(corrected_min_wl,reach_id,"corrected_min",session=session)
         corrected_max_wl = corrected_max_wl.rename(columns={'index': 'datetime', 'Corrected Simulated Streamflow': 'stream_flow'})
         cache_historical_data(corrected_max_wl,reach_id,"corrected_max",session=session)
-
 
 
         await channel_layer.group_send(
@@ -564,14 +569,14 @@ def retrieve_data_bias_corrected(data_id,product):
     # print(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
     # if os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected/{data_id}_mean.json')):
 
-    corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
+    # corrected_df_mean = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_mean.json'))
     # print(corrected_df_mean)
-    corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_max.json'))
+    # corrected_df_min = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_max.json'))
     # print(corrected_df_min)
     
-    corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_min.json'))
+    # corrected_df_max = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{data_id}_min.json'))
     # print(corrected_df_max)
-    breakpoint()
+    # breakpoint()
     corrected_df_mean  = cache_historical_data(data_df=None,comid=data_id,type_data="corrected_mean",session=session)
     corrected_df_mean = corrected_df_mean.reset_index()
 

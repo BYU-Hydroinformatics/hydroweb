@@ -180,19 +180,20 @@ def cache_hydroweb_data(hydroweb_product,url,session):
     # print("hey", response_content)
     if water_level_data_query.first() is not None:
         if hydroweb_product.startswith('R'):
-            water_level_df = pd.read_sql(water_level_data_query.statement, water_level_data_query.session.bind, index_col='datetime')
-            water_level_df = water_level_df.reset_index()
+            df_val,df_min,df_max = retrive_hydroweb_river_data(water_level_data_query)
+            # water_level_df = pd.read_sql(water_level_data_query.statement, water_level_data_query.session.bind, index_col='datetime')
+            # water_level_df = water_level_df.reset_index()
             
-            water_level_df = water_level_df.rename(columns={'water_level':'y','datetime':'x'})
-            # Split dataframe into different types
+            # water_level_df = water_level_df.rename(columns={'water_level':'y','datetime':'x'})
+            # # Split dataframe into different types
 
-            df_val = water_level_df[water_level_df['type_data'] == "observed_mean"]
-            df_min = water_level_df[water_level_df['type_data'] == "observed_min"]
-            df_max = water_level_df[water_level_df['type_data'] == "observed_max"]
+            # df_val = water_level_df[water_level_df['type_data'] == "observed_mean"]
+            # df_min = water_level_df[water_level_df['type_data'] == "observed_min"]
+            # df_max = water_level_df[water_level_df['type_data'] == "observed_max"]
 
-            df_val = df_val.drop(columns=['id','type_data','hydroweb_product'])
-            df_min = df_min.drop(columns=['id','type_data','hydroweb_product'])
-            df_max = df_max.drop(columns=['id','type_data','hydroweb_product'])
+            # df_val = df_val.drop(columns=['id','type_data','hydroweb_product'])
+            # df_min = df_min.drop(columns=['id','type_data','hydroweb_product'])
+            # df_max = df_max.drop(columns=['id','type_data','hydroweb_product'])
 
             data_val = df_val.to_dict('records')
             data_max = df_max.to_dict('records')
@@ -267,7 +268,23 @@ def insert_hydroweb_data(session,data_df,type_data,hydroweb_product):
     session.bulk_insert_mappings(HydrowebData, new_data_df.to_dict(orient="records"))
     session.commit()
 
+def retrive_hydroweb_river_data(water_level_data_query):
 
+    water_level_df = pd.read_sql(water_level_data_query.statement, water_level_data_query.session.bind, index_col='datetime')
+    water_level_df = water_level_df.reset_index()
+
+    water_level_df = water_level_df.rename(columns={'water_level':'y','datetime':'x'})
+    # Split dataframe into different types
+
+    df_val = water_level_df[water_level_df['type_data'] == "observed_mean"]
+    df_min = water_level_df[water_level_df['type_data'] == "observed_min"]
+    df_max = water_level_df[water_level_df['type_data'] == "observed_max"]
+
+    df_val = df_val.drop(columns=['id','type_data','hydroweb_product'])
+    df_min = df_min.drop(columns=['id','type_data','hydroweb_product'])
+    df_max = df_max.drop(columns=['id','type_data','hydroweb_product'])
+
+    return [df_val,df_min,df_max]  
 # def cache_forecast_data(data_df,comid,type_data,session):
 #     forecast_data_query = session.query(ForecastData).filter(ForecastData.reach_id == comid, ForecastData.type_data == type_data)
 #     session.commit()
