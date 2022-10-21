@@ -12,7 +12,7 @@ from tethysext.hydroviewer.controllers.utilities import Utilities
 from tethysext.hydroviewer.model import ForecastRecords, HistoricalSimulation, ReturnPeriods
 from asgiref.sync import sync_to_async
 from .model import cache_historical_data, cache_hydroweb_data,retrive_hydroweb_river_data, HydrowebData
-from datetime import dt
+import datetime as dt
 
 import requests
 import json
@@ -868,7 +868,7 @@ async def make_forecast_bias_correction(reach_id,product):
 
     # else:
     # task_get_bias_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
-    results = await asyncio.gather([task_get_bias_forecast_records_geoglows_data,task_get_bias_forecast_ensembles_geoglows_data])
+    results = await asyncio.gather([task_get_bias_forecast_ensembles_geoglows_data,task_get_bias_forecast_records_geoglows_data])
 
     return results
 
@@ -907,6 +907,7 @@ async def return_periods_bias_correction(product,reach_id):
 async def forecast_records_bias_correction(product,reach_id):
     channel_layer = get_channel_layer()
     simulated_df = hydroviewer_utility_object.cache_historical_simulation(active_app=app,cs_api_source=None,comid=reach_id, session=session,response_content=None)
+    simulated_df.index = pd.to_datetime(simulated_df.index)
 
     #Hydroweb Observed Data
     water_level_data_query = session.query(HydrowebData).filter(HydrowebData.hydroweb_product == product)
@@ -961,110 +962,108 @@ async def forecast_records_bias_correction(product,reach_id):
     fixed_records1 = correct_bias_forecast_records(forecast_record,simulated_df,meses,mean_wl,min_value1)
     fixed_records2 = correct_bias_forecast_records(forecast_record,simulated_df,meses,min_wl,min_value2)
     fixed_records3 = correct_bias_forecast_records(forecast_record,simulated_df,meses,max_wl,min_value3)
+    data_plot = {}
+    ensembles_not_completed = True
+    breakpoint()
+    while ensembles_not_completed:
+        # reading the cache from the bias correction of the forecast ensembles
+        if os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_fixed_stats.json')) and os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df1.json')) :
+            fixed_stats = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_fixed_stats.json'))
     
-    # reading the cache from the bias corection of the forecast ensembles
-    if os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_fixed_stats.json')) and os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df1.json')) :
-        fixed_stats = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_fixed_stats.json'))
-   
-        high_res_df1 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df1.json'))
-        
-        high_res_df2 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df2.json'))
-
-        high_res_df3 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df3.json'))
-
-
-
-        x_vals = (fixed_stats.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[0])
-        max_visible = max(fixed_stats.max())
-
-        record_plot1 = fixed_records1.copy()
-        record_plot1 = record_plot1.loc[record_plot1.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
-        record_plot1 = record_plot1.loc[record_plot1.index <= pd.to_datetime(fixed_stats.index[0])]
-        
-
-
-        data_plot = {}
-
-        if len(record_plot1.index) > 0:
-            records_plot_1_new_df = record_plot1.iloc[:, 0]
-            records_plot_1_new_df = records_plot_1_new_df.reset_index()
+            high_res_df1 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df1.json'))
             
-            records_plot_1_new_df.rename(columns={"datetime":'x',"streamflow_m^3/s": 'y'}, inplace=True)
-            records_plot_1_dict = records_plot_1_new_df.to_dict('records')
-            data_plot['record_plot1'] = records_plot_1_dict
+            high_res_df2 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df2.json'))
 
-            x_vals = (record_plot1.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], record_plot1.index[0])
-            max_visible = max(record_plot1.max().values[0], max_visible)
+            high_res_df3 = pd.read_json(os.path.join(app.get_app_workspace().path,f'corrected_forecast_data/{reach_id}_high_res_df3.json'))
 
-        record_plot2 = fixed_records2.copy()
-        record_plot2 = record_plot2.loc[record_plot2.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
-        record_plot2 = record_plot2.loc[record_plot2.index <= pd.to_datetime(fixed_stats.index[0])]
+            x_vals = (fixed_stats.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[0])
+            max_visible = max(fixed_stats.max())
 
-        record_plot3 = fixed_records3.copy()
-        record_plot3 = record_plot3.loc[record_plot3.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
-        record_plot3 = record_plot3.loc[record_plot3.index <= pd.to_datetime(fixed_stats.index[0])]
+            record_plot1 = fixed_records1.copy()
+            record_plot1 = record_plot1.loc[record_plot1.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
+            record_plot1 = record_plot1.loc[record_plot1.index <= pd.to_datetime(fixed_stats.index[0])]
+            
 
+            if len(record_plot1.index) > 0:
+                records_plot_1_new_df = record_plot1.iloc[:, 0]
+                records_plot_1_new_df = records_plot_1_new_df.reset_index()
+                
+                records_plot_1_new_df.rename(columns={"datetime":'x',"streamflow_m^3/s": 'y'}, inplace=True)
+                records_plot_1_dict = records_plot_1_new_df.to_dict('records')
+                data_plot['record_plot1'] = records_plot_1_dict
 
-        max_min_record_WL = {
-            'x': np.concatenate([record_plot3.index, record_plot2.index[::-1]]).tolist(),
-            'y': np.concatenate([record_plot3.iloc[:, 0].values, record_plot2.iloc[:, 0].values[::-1]]).tolist()
-        }
+                x_vals = (record_plot1.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], record_plot1.index[0])
+                max_visible = max(record_plot1.max().values[0], max_visible)
 
-        max_min_record_WL_df = pd.DataFrame(max_min_record_WL)
-        max_min_record_WL_df_dict = max_min_record_WL_df.to_dict('records')
+            record_plot2 = fixed_records2.copy()
+            record_plot2 = record_plot2.loc[record_plot2.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
+            record_plot2 = record_plot2.loc[record_plot2.index <= pd.to_datetime(fixed_stats.index[0])]
 
-        max_record_WL = {
-            'x': record_plot3.index.values.tolist(),
-            'y': record_plot3.iloc[:, 0].values.tolist()
-        }
-        max_record_WL_df = pd.DataFrame(max_record_WL)
-        max_record_WL_df_dict = max_record_WL_df.to_dict('records')
-
-
-        min_record_WL = {
-            'x': record_plot2.index.values.tolist(),
-            'y': record_plot2.iloc[:, 0].values.tolist()
-        }
-        min_record_WL_df = pd.DataFrame(min_record_WL)
-        min_record_WL_df_dict = min_record_WL_df.to_dict('records')
-
-        if len(record_plot2.index) > 0:
-            data_plot['max_min_record_WL'] = max_min_record_WL_df_dict
-            data_plot['max_record_WL'] = max_record_WL_df_dict
-            data_plot['min_record_WL'] = min_record_WL_df_dict
+            record_plot3 = fixed_records3.copy()
+            record_plot3 = record_plot3.loc[record_plot3.index >= pd.to_datetime(fixed_stats.index[0] - dt.timedelta(days=8))]
+            record_plot3 = record_plot3.loc[record_plot3.index <= pd.to_datetime(fixed_stats.index[0])]
 
 
-        ### check for refactoring 
-        max_min_high_res_WL = {
-            'x': np.concatenate([high_res_df3.index, high_res_df2.index[::-1]]).tolist(),
-            'y': np.concatenate([high_res_df3.iloc[:, 0].values, high_res_df2.iloc[:, 0].values[::-1]]).tolist()
-        }
+            max_min_record_WL = {
+                'x': np.concatenate([record_plot3.index, record_plot2.index[::-1]]).tolist(),
+                'y': np.concatenate([record_plot3.iloc[:, 0].values, record_plot2.iloc[:, 0].values[::-1]]).tolist()
+            }
 
-        max_min_high_res_WL_df = pd.DataFrame(max_min_high_res_WL)
-        max_min_high_res_WL_df_dict = max_min_high_res_WL_df.to_dict('records')
+            max_min_record_WL_df = pd.DataFrame(max_min_record_WL)
+            max_min_record_WL_df_dict = max_min_record_WL_df.to_dict('records')
 
-        max_high_res_WL = {
-            'x': high_res_df3.index.values.tolist(),
-            'y': high_res_df3.iloc[:, 0].values.tolist()
-        }
-        max_high_res_WL_df = pd.DataFrame(max_high_res_WL)
-        max_high_res_WL_df_dict = max_high_res_WL_df.to_dict('records')
+            max_record_WL = {
+                'x': record_plot3.index.values.tolist(),
+                'y': record_plot3.iloc[:, 0].values.tolist()
+            }
+            max_record_WL_df = pd.DataFrame(max_record_WL)
+            max_record_WL_df_dict = max_record_WL_df.to_dict('records')
 
-        min_high_res_WL = {
-            'x': high_res_df2.index.values.tolist(),
-            'y': high_res_df2.iloc[:, 0].values.tolist()
-        }
-        min_high_res_WL_df = pd.DataFrame(min_high_res_WL)
-        min_high_res_WL_df_dict = min_high_res_WL_df.to_dict('records')
-        
-        if len(high_res_df2.index) > 0:
-            data_plot['max_min_high_res_WL'] = max_min_high_res_WL_df_dict
-            data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
-            data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
 
-    
-    else: 
-        await asyncio.sleep(4) 
+            min_record_WL = {
+                'x': record_plot2.index.values.tolist(),
+                'y': record_plot2.iloc[:, 0].values.tolist()
+            }
+            min_record_WL_df = pd.DataFrame(min_record_WL)
+            min_record_WL_df_dict = min_record_WL_df.to_dict('records')
+
+            if len(record_plot2.index) > 0:
+                data_plot['max_min_record_WL'] = max_min_record_WL_df_dict
+                data_plot['max_record_WL'] = max_record_WL_df_dict
+                data_plot['min_record_WL'] = min_record_WL_df_dict
+
+
+            ### check for refactoring 
+            max_min_high_res_WL = {
+                'x': np.concatenate([high_res_df3.index, high_res_df2.index[::-1]]).tolist(),
+                'y': np.concatenate([high_res_df3.iloc[:, 0].values, high_res_df2.iloc[:, 0].values[::-1]]).tolist()
+            }
+
+            max_min_high_res_WL_df = pd.DataFrame(max_min_high_res_WL)
+            max_min_high_res_WL_df_dict = max_min_high_res_WL_df.to_dict('records')
+
+            max_high_res_WL = {
+                'x': high_res_df3.index.values.tolist(),
+                'y': high_res_df3.iloc[:, 0].values.tolist()
+            }
+            max_high_res_WL_df = pd.DataFrame(max_high_res_WL)
+            max_high_res_WL_df_dict = max_high_res_WL_df.to_dict('records')
+
+            min_high_res_WL = {
+                'x': high_res_df2.index.values.tolist(),
+                'y': high_res_df2.iloc[:, 0].values.tolist()
+            }
+            min_high_res_WL_df = pd.DataFrame(min_high_res_WL)
+            min_high_res_WL_df_dict = min_high_res_WL_df.to_dict('records')
+            
+            if len(high_res_df2.index) > 0:
+                data_plot['max_min_high_res_WL'] = max_min_high_res_WL_df_dict
+                data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
+                data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
+            
+            ensembles_not_completed =  False
+        else: 
+            await asyncio.sleep(1) 
 
     mssge_string = "Complete"
     try:
