@@ -1,3 +1,4 @@
+from bdb import Breakpoint
 from django.shortcuts import render
 from tethys_sdk.permissions import login_required
 from django.http import JsonResponse
@@ -11,10 +12,12 @@ from tethysext.hydroviewer.controllers.utilities import Utilities
 from tethysext.hydroviewer.model import ForecastRecords, HistoricalSimulation, ReturnPeriods
 from asgiref.sync import sync_to_async
 from .model import cache_historical_data, cache_hydroweb_data,retrive_hydroweb_river_data, HydrowebData
+from datetime import date
 
 import requests
 import json
 import pandas as pd
+import numpy as np
 import io
 import os
 import geoglows
@@ -503,7 +506,7 @@ async def bias_correction(product,reach_id):
         # corrected_max_wl = corrected_max_wl.rename(columns={'index': 'x', 'Corrected Simulated Streamflow': 'y'})
         # print(corrected_mean_wl)
 
-        breakpoint()
+        # breakpoint()
 
         corrected_mean_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
         corrected_min_wl.to_json(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_min.json'))
@@ -591,7 +594,7 @@ def retrieve_data_bias_corrected(data_id,product):
     corrected_df_max = corrected_df_max.reset_index()
 
     corrected_df_max = corrected_df_max.rename(columns={'datetime': 'x', 'stream_flow': 'y'})
-    breakpoint()
+    # breakpoint()
 
     
     data_val = corrected_df_mean.to_dict('records')
@@ -653,7 +656,7 @@ def saveForecastData(request):
         asyncio.run(make_forecast_api_calls(api_base_url,reach_id,product))
 
     except Exception as e:
-        print('saveHistoricalSimulationData error')
+        print('saveForecastData error')
         print(e)
         print(traceback.format_exc())
     finally:
@@ -663,22 +666,25 @@ def saveForecastData(request):
 
 async def make_forecast_api_calls(api_base_url,reach_id,product):
     list_async_task = []
-    forecast_records_query = session.query(ForecastRecords).filter(ForecastRecords.reach_id == reach_id)
+    ## check if today is the last day
+    # today = date.today()
 
-    if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
-        task_get_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
-    else:
-        task_get_forecast_ensembles_geoglows_data =  await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
-    # list_async_task.append(task_get_forecast_ensembles_geoglows_data)
-    if forecast_records_query.first():
+    # forecast_records_query = session.query(ForecastRecords).filter(ForecastRecords.reach_id == reach_id)
+
+    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json')):
+    task_get_forecast_ensembles_geoglows_data = asyncio.create_task(forecast_ensembles_api_call(api_base_url,reach_id,product))
+    # else:
+        # task_get_forecast_ensembles_geoglows_data =  await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Ensemble_Data_Downloaded"))
+    list_async_task.append(task_get_forecast_ensembles_geoglows_data)
+    # if forecast_records_query.first() is None and forecast_records_query.first().datetime :
     # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json')):
-        task_get_forecast_geoglows_data =  await asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
-    else:
-        task_get_forecast_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Data_Downloaded"))
+    task_get_forecast_geoglows_data =  asyncio.create_task(forecast_api_call(api_base_url,reach_id,product))
+    # else:
+        # task_get_forecast_geoglows_data = await asyncio.create_task(fake_print_custom(api_base_url,reach_id,product,"Forecast_Data_Downloaded"))
     
-    # list_async_task.append(task_get_forecast_geoglows_data)
+    list_async_task.append(task_get_forecast_geoglows_data)
     
-    results = await asyncio.gather([task_get_forecast_ensembles_geoglows_data,task_get_forecast_geoglows_data])
+    results = await asyncio.gather(*list_async_task)
 
     return results
 
@@ -758,7 +764,7 @@ async def forecast_ensembles_api_call(api_base_url,reach_id,product):
     except Exception as e:
         print("api_call error 2")
         print(e)
-    # return await mssge_string
+    return  mssge_string
 
 
 async def forecast_api_call(api_base_url,reach_id,product):
@@ -777,18 +783,19 @@ async def forecast_api_call(api_base_url,reach_id,product):
 
         # response = response_await.json()
         print(response_await)
+        # breakpoint()
         # print(response_await.text)
-        # forecast_records = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+        forecast_records = pd.read_csv(io.StringIO(response_await.text), index_col=0)
+    
+        # forecast_records = hydroviewer_utility_object.cache_forecast_records(app,api_base_url,reach_id,session,response_content=response_await.text)
 
-        forecast_records = hydroviewer_utility_object.cache_forecast_records(app,api_base_url,reach_id,session,response_content=response_await.text)
 
-
-        # forecast_records.index = pd.to_datetime(forecast_records.index)
-        # forecast_records[forecast_records < 0] = 0
-        # forecast_records.index = forecast_records.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+        forecast_records.index = pd.to_datetime(forecast_records.index)
+        forecast_records[forecast_records < 0] = 0
+        forecast_records.index = forecast_records.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
         forecast_records.index = pd.to_datetime(forecast_records.index)
         
-        # forecast_records.to_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
+        forecast_records.to_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
 
         await channel_layer.group_send(
             "notifications_hydroweb",
@@ -821,7 +828,330 @@ async def forecast_api_call(api_base_url,reach_id,product):
     except Exception as e:
         print("api_call error 2")
         print(e)
-    # return await mssge_string
+    
+    return mssge_string
+
+
+@controller(name='executeForecastBiasCorrection',url='hydroweb/executeForecastBiasCorrection') 
+@api_view(['GET', 'POST'])
+@authentication_classes([])
+@permission_classes([])
+async def execute_forecast_bias_corection(request):
+    print("success")
+    reach_id = request.data.get('reach_id')
+    product = request.data.get('product')
+
+    # reach_id = request.GET.get('reach_id')
+    # reach_id = 9890
+    print(reach_id)
+    # loop = asyncio.get_event_loop()
+    response = "executing"
+    try:
+
+        asyncio.run(make_forecast_bias_correction(reach_id,product))
+
+    except Exception as e:
+        print('executeForecastBiasCorrection error')
+        print(e)
+    finally:
+        print('finally')
+    return JsonResponse({'state':response })
+
+async def make_forecast_bias_correction(reach_id,product):
+    # if historical_corrected_simulation_query.first() is None:
+    # print(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
+
+    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json')):
+        # print("not here")
+    task_get_bias_forecast_records_geoglows_data = await asyncio.create_task(forecast_records_bias_correction(product,reach_id))
+    task_get_bias_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_bias_correction(product,reach_id))
+
+    # else:
+    # task_get_bias_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
+    results = await asyncio.gather([task_get_bias_forecast_records_geoglows_data,task_get_bias_forecast_ensembles_geoglows_data])
+
+    return results
+
+async def return_periods_bias_correction(product,reach_id):
+    channel_layer = get_channel_layer()
+    
+    mssge_string = "Complete"
+    try:
+        
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Return_Period_Bias_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except Exception as e:
+        print("return period bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Return_Period_Bias_Data_Downloaded_Error",
+                
+            },
+        )   
+
+    return mssge_string 
+async def forecast_records_bias_correction(product,reach_id):
+    channel_layer = get_channel_layer()
+    
+    mssge_string = "Complete"
+    try:
+        
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Forecast_Records_Bias_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except Exception as e:
+        print("forecast bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Forecast_Records_Bias_Data_Downloaded_Error",
+                
+            },
+        )   
+
+    return mssge_string
+
+async def forecast_ensembles_bias_correction(product,reach_id):
+    channel_layer = get_channel_layer()
+    json_obj = {}
+    forecast_ens = pd.read_json(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json'))
+    forecast_ens = forecast_ens.reset_index()
+    # mean_wl.set_index('x', inplace=True)
+
+    # mean_wl.index = pd.to_datetime(mean_wl.index)
+
+    simulated_df = hydroviewer_utility_object.cache_historical_simulation(active_app=app,cs_api_source=None,comid=reach_id, session=session,response_content=None)
+    water_level_data_query = session.query(HydrowebData).filter(HydrowebData.hydroweb_product == product)
+    mean_wl,min_wl,max_wl = retrive_hydroweb_river_data(water_level_data_query)
+    
+    #Hydroweb Observed Data
+    water_level_data_query = session.query(HydrowebData).filter(HydrowebData.hydroweb_product == product)
+    mean_wl,min_wl,max_wl = retrive_hydroweb_river_data(water_level_data_query)
+
+    # mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+    mean_wl.set_index('x', inplace=True)
+
+    mean_wl.index = pd.to_datetime(mean_wl.index)
+
+    # min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+    min_wl.set_index('x', inplace=True)
+    min_wl.index = pd.to_datetime(min_wl.index)
+    
+    # max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+    max_wl.set_index('x', inplace=True)
+    max_wl.index = pd.to_datetime(max_wl.index)
+
+    #Mean Water Level
+    min_value1 = mean_wl['y'].min()
+    if min_value1 >= 0:
+        min_value1 = 0
+
+    mean_adjusted = mean_wl - min_value1
+
+    #Min Water Level
+    min_value2 = min_wl['Water Level (m)'].min()
+
+    if min_value2 >= 0:
+        min_value2 = 0
+
+    min_adjusted = min_wl - min_value2
+
+
+    #Max Water Level
+    min_value3 = max_wl['Water Level (m)'].min()
+
+    if min_value3 >= 0:
+        min_value3 = 0
+
+    max_adjusted = max_wl - min_value3
+
+
+
+    session.close()
+
+    ensemble1, high_res_df1 = correct_bias_ensemble(simulated_df,forecast_ens,mean_adjusted,min_value1)
+    ensemble2, high_res_df2 = correct_bias_ensemble(simulated_df,forecast_ens,min_adjusted,min_value2)
+    ensemble3, high_res_df3 = correct_bias_ensemble(simulated_df,forecast_ens,max_adjusted,min_value3)
+
+    ensemble_list = [ensemble1,ensemble2,ensemble3]
+    # fixed_stats = join_corrected_forecast_ensemble(ensemble_list,high_res_df1)
+    max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean = join_corrected_forecast_ensemble(ensemble_list,high_res_df1)
+    data_max = max_df.to_dict('records')
+    data_p75 = p75_df.to_dict('records')
+    data_p25 = p25_df.to_dict('records')
+    data_min = min_df.to_dict('records')
+    data_mean = mean_df.to_dict('records')
+    data_highres = high_res_df_mean.to_dict('records')
+
+
+    fixed_stats = {
+        'mean':data_mean,
+        'min': data_min,
+        'max': data_max,
+        'p25': data_p25,
+        'p75': data_p75,
+        'high_res':data_highres
+    }
+
+
+    breakpoint()
+    mssge_string = "Complete"
+    try:
+
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "notifications_hydroweb",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Plot_Forecast_Records_Bias_Data_Downloaded",
+                "message": mssge_string,
+                "data": fixed_stats
+            },
+        )
+    except Exception as e:
+        print("forecast ensembles bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Plot_Forecast_Records_Bias_Data_Downloaded_Error",
+                
+            },
+        )   
+
+    return mssge_string
+
+
+def join_corrected_forecast_ensemble(ensemble_list,high_res_df_mean):
+    #Join Corrected
+    # corrected_ensembles = pd.concat(ensemble_list, axis=1)
+    # print(corrected_ensembles)
+
+    # max_df = corrected_ensembles.quantile(1.0, axis=1).to_frame()
+    # max_df.rename(columns={1.0: 'flow_max_m^3/s'}, inplace=True)
+
+    # p75_df = corrected_ensembles.quantile(0.75, axis=1).to_frame()
+    # p75_df.rename(columns={0.75: 'flow_75%_m^3/s'}, inplace=True)
+
+    # p25_df = corrected_ensembles.quantile(0.25, axis=1).to_frame()
+    # p25_df.rename(columns={0.25: 'flow_25%_m^3/s'}, inplace=True)
+
+    # min_df = corrected_ensembles.quantile(0, axis=1).to_frame()
+    # min_df.rename(columns={0.0: 'flow_min_m^3/s'}, inplace=True)
+
+    # mean_df = corrected_ensembles.mean(axis=1).to_frame()
+    # mean_df.rename(columns={0: 'flow_avg_m^3/s'}, inplace=True)
+
+    # high_res_df_mean.rename(columns={'ensemble_52_m^3/s': 'high_res_m^3/s'}, inplace=True)
+
+    # fixed_stats = pd.concat([max_df, p75_df, mean_df, p25_df, min_df, high_res_df_mean], axis=1)
+
+    # return fixed_stats
+
+    corrected_ensembles = pd.concat(ensemble_list, axis=1)
+    print(corrected_ensembles)
+
+    max_df = corrected_ensembles.quantile(1.0, axis=1).to_frame()
+    max_df.rename(columns={"datetime":'x',1.0: 'y'}, inplace=True)
+
+    p75_df = corrected_ensembles.quantile(0.75, axis=1).to_frame()
+    p75_df.rename(columns={"datetime":'x',0.75: 'y'}, inplace=True)
+
+    p25_df = corrected_ensembles.quantile(0.25, axis=1).to_frame()
+    p25_df.rename(columns={"datetime":'x',0.25: 'y'}, inplace=True)
+
+    min_df = corrected_ensembles.quantile(0, axis=1).to_frame()
+    min_df.rename(columns={"datetime":'x',0.0: 'y'}, inplace=True)
+
+    mean_df = corrected_ensembles.mean(axis=1).to_frame()
+    mean_df.rename(columns={"datetime":'x',0: 'y'}, inplace=True)
+
+    high_res_df_mean.rename(columns={"datetime":'x','ensemble_52_m^3/s': 'y'}, inplace=True)
+
+    # fixed_stats = pd.concat([max_df, p75_df, mean_df, p25_df, min_df, high_res_df_mean], axis=1)
+
+    return [max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean]
+
+
+def correct_bias_ensemble(simulated_df,forecast_ens,value_adjusted,min_value):
+    monthly_simulated = simulated_df[simulated_df.index.month == (forecast_ens.index[0]).month].dropna()
+    # monthly_observed = mean_wl[mean_wl.index.month == (forecast_ens.index[0]).month].dropna()
+
+    min_simulated = np.min(monthly_simulated.iloc[:, 0].to_list())
+    max_simulated = np.max(monthly_simulated.iloc[:, 0].to_list())
+
+    min_factor_df = forecast_ens.copy()
+    max_factor_df = forecast_ens.copy()
+    forecast_ens_df = forecast_ens.copy()
+
+    for column in forecast_ens.columns:
+        tmp = forecast_ens[column].dropna().to_frame()
+        min_factor = tmp.copy()
+        max_factor = tmp.copy()
+        min_factor.loc[min_factor[column] >= min_simulated, column] = 1
+        min_index_value = min_factor[min_factor[column] != 1].index.tolist()
+
+        for element in min_index_value:
+            min_factor[column].loc[min_factor.index == element] = tmp[column].loc[tmp.index == element] / min_simulated
+
+        max_factor.loc[max_factor[column] <= max_simulated, column] = 1
+        max_index_value = max_factor[max_factor[column] != 1].index.tolist()
+
+        for element in max_index_value:
+            max_factor[column].loc[max_factor.index == element] = tmp[column].loc[tmp.index == element] / max_simulated
+
+        tmp.loc[tmp[column] <= min_simulated, column] = min_simulated
+        tmp.loc[tmp[column] >= max_simulated, column] = max_simulated
+
+        forecast_ens_df.update(pd.DataFrame(tmp[column].values, index=tmp.index, columns=[column]))
+        min_factor_df.update(pd.DataFrame(min_factor[column].values, index=min_factor.index, columns=[column]))
+        max_factor_df.update(pd.DataFrame(max_factor[column].values, index=max_factor.index, columns=[column]))
+
+    corrected_ensembles = geoglows.bias.correct_forecast(forecast_ens_df, simulated_df, value_adjusted)
+    corrected_ensembles = corrected_ensembles.multiply(min_factor_df, axis=0)
+    corrected_ensembles = corrected_ensembles.multiply(max_factor_df, axis=0)
+    corrected_ensembles = corrected_ensembles + min_value
+
+    ensemble = corrected_ensembles.copy()
+    high_res_df = ensemble['ensemble_52_m^3/s'].to_frame()
+    ensemble.drop(columns=['ensemble_52_m^3/s'], inplace=True)
+    ensemble.dropna(inplace=True)
+    high_res_df.dropna(inplace=True)
+    
+    return [ensemble, high_res_df]
+
+
 
 
 def gumbel_1(std: float, xbar: float, rp: int or float) -> float:
