@@ -836,7 +836,7 @@ async def forecast_api_call(api_base_url,reach_id,product):
 @api_view(['GET', 'POST'])
 @authentication_classes([])
 @permission_classes([])
-async def execute_forecast_bias_corection(request):
+def execute_forecast_bias_corection(request):
     print("success")
     reach_id = request.data.get('reach_id')
     product = request.data.get('product')
@@ -941,7 +941,9 @@ async def forecast_ensembles_bias_correction(product,reach_id):
     channel_layer = get_channel_layer()
     json_obj = {}
     forecast_ens = pd.read_json(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json'))
-    forecast_ens = forecast_ens.reset_index()
+    # forecast_ens = forecast_ens.reset_index()
+    forecast_ens.index = pd.to_datetime(forecast_ens.index)
+
     # mean_wl.set_index('x', inplace=True)
 
     # mean_wl.index = pd.to_datetime(mean_wl.index)
@@ -973,9 +975,8 @@ async def forecast_ensembles_bias_correction(product,reach_id):
         min_value1 = 0
 
     mean_adjusted = mean_wl - min_value1
-
     #Min Water Level
-    min_value2 = min_wl['Water Level (m)'].min()
+    min_value2 = min_wl['y'].min()
 
     if min_value2 >= 0:
         min_value2 = 0
@@ -984,7 +985,7 @@ async def forecast_ensembles_bias_correction(product,reach_id):
 
 
     #Max Water Level
-    min_value3 = max_wl['Water Level (m)'].min()
+    min_value3 = max_wl['y'].min()
 
     if min_value3 >= 0:
         min_value3 = 0
@@ -1027,11 +1028,11 @@ async def forecast_ensembles_bias_correction(product,reach_id):
         await channel_layer.group_send(
             "notifications_hydroweb",
             {
-                "type": "notifications_hydroweb",
+                "type": "data_notifications",
                 "reach_id": reach_id,
                 "product": product,
                 "command": "Plot_Forecast_Records_Bias_Data_Downloaded",
-                "message": mssge_string,
+                "mssg": mssge_string,
                 "data": fixed_stats
             },
         )
@@ -1078,33 +1079,63 @@ def join_corrected_forecast_ensemble(ensemble_list,high_res_df_mean):
     # fixed_stats = pd.concat([max_df, p75_df, mean_df, p25_df, min_df, high_res_df_mean], axis=1)
 
     # return fixed_stats
-
+    # breakpoint()
     corrected_ensembles = pd.concat(ensemble_list, axis=1)
     print(corrected_ensembles)
 
     max_df = corrected_ensembles.quantile(1.0, axis=1).to_frame()
-    max_df.rename(columns={"datetime":'x',1.0: 'y'}, inplace=True)
+    max_df.index = pd.to_datetime(max_df.index)
+    max_df.index = max_df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    max_df= max_df.reset_index()
+    max_df.rename(columns={"index":'x',1.0: 'y'}, inplace=True)
+
+
 
     p75_df = corrected_ensembles.quantile(0.75, axis=1).to_frame()
-    p75_df.rename(columns={"datetime":'x',0.75: 'y'}, inplace=True)
+    p75_df.index = pd.to_datetime(p75_df.index)
+    p75_df.index = p75_df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    p75_df = p75_df.reset_index()
+    p75_df.rename(columns={"index":'x',0.75: 'y'}, inplace=True)
 
     p25_df = corrected_ensembles.quantile(0.25, axis=1).to_frame()
-    p25_df.rename(columns={"datetime":'x',0.25: 'y'}, inplace=True)
+    p25_df.index = pd.to_datetime(p25_df.index)
+    p25_df.index = p25_df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    p25_df = p25_df.reset_index()
+    p25_df.rename(columns={"index":'x',0.25: 'y'}, inplace=True)
 
     min_df = corrected_ensembles.quantile(0, axis=1).to_frame()
-    min_df.rename(columns={"datetime":'x',0.0: 'y'}, inplace=True)
+    min_df.index = pd.to_datetime(min_df.index)
+    min_df.index = min_df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    min_df = min_df.reset_index()
+    min_df.rename(columns={"index":'x',0.0: 'y'}, inplace=True)
 
     mean_df = corrected_ensembles.mean(axis=1).to_frame()
-    mean_df.rename(columns={"datetime":'x',0: 'y'}, inplace=True)
+    mean_df.index = pd.to_datetime(mean_df.index)
+    mean_df.index = mean_df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    mean_df = mean_df.reset_index()
+    mean_df.rename(columns={"index":'x',0: 'y'}, inplace=True)
 
-    high_res_df_mean.rename(columns={"datetime":'x','ensemble_52_m^3/s': 'y'}, inplace=True)
+    high_res_df_mean.index = pd.to_datetime(high_res_df_mean.index)
+    high_res_df_mean.index = high_res_df_mean.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+    high_res_df_mean = high_res_df_mean.reset_index()
+
+    high_res_df_mean.rename(columns={"index":'x','ensemble_52_m^3/s': 'y'}, inplace=True)
 
     # fixed_stats = pd.concat([max_df, p75_df, mean_df, p25_df, min_df, high_res_df_mean], axis=1)
 
     return [max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean]
 
 
+# def format_df_ensembles(corrected_ensembles,y_column_to_rename,):
+#     df = corrected_ensembles.quantile(1.0, axis=1).to_frame()
+#     df.index = pd.to_datetime(df.index)
+#     df.index = df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
+#     df= df.reset_index()
+#     df.rename(columns={"datetime":'x',f'{y_column_to_rename}': 'y'}, inplace=True)
+#     return df
+
 def correct_bias_ensemble(simulated_df,forecast_ens,value_adjusted,min_value):
+    simulated_df.index = pd.to_datetime(simulated_df.index)
     monthly_simulated = simulated_df[simulated_df.index.month == (forecast_ens.index[0]).month].dropna()
     # monthly_observed = mean_wl[mean_wl.index.month == (forecast_ens.index[0]).month].dropna()
 
