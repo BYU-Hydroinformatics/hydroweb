@@ -858,38 +858,41 @@ def execute_forecast_bias_corection(request):
     return JsonResponse({'state':response })
 
 async def make_forecast_bias_correction(reach_id,product):
-    # if historical_corrected_simulation_query.first() is None:
-    # print(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json'))
 
-    # if not os.path.exists(os.path.join(app.get_app_workspace().path,f'corrected_data/{reach_id}_mean.json')):
-        # print("not here")
-    task_get_bias_forecast_records_geoglows_data = await asyncio.create_task(forecast_records_bias_correction(product,reach_id))
-    task_get_bias_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_bias_correction(product,reach_id))
+    # task_get_bias_forecast_records_geoglows_data = await asyncio.create_task(forecast_records_bias_correction(product,reach_id))
+    # task_get_bias_forecast_ensembles_geoglows_data = await asyncio.create_task(forecast_ensembles_bias_correction(product,reach_id))
+    # results = await asyncio.gather([task_get_bias_forecast_ensembles_geoglows_data,task_get_bias_forecast_records_geoglows_data])
+    # return results
 
-    # else:
-    # task_get_bias_geoglows_data = await asyncio.create_task(fake_print2(reach_id,product))
-    results = await asyncio.gather([task_get_bias_forecast_ensembles_geoglows_data,task_get_bias_forecast_records_geoglows_data])
+    task_get_bias_forecast_ensembles_and_records_geoglows_data = await asyncio.create_task(forecast_records_and_ensemble_correction(reach_id,product))
 
-    return results
+    return task_get_bias_forecast_ensembles_and_records_geoglows_data
 
-async def return_periods_bias_correction(product,reach_id):
+
+
+async def forecast_records_and_ensemble_correction(reach_id,product):
     channel_layer = get_channel_layer()
     
+    simulated_df,mean_wl,min_wl,max_wl,min_value1,min_value2,min_value3,mean_adjusted,min_adjusted,max_adjusted = common_data_forecast(reach_id,product)
+    forecast_ens, forecast_record = get_forecast_ensembles_and_records(reach_id)
+    fixed_stats, fixed_stats_df, high_res_df1, high_res_df2,high_res_df3 = get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_value1,min_adjusted,min_value2,max_adjusted,min_value3)
+    ### send message for the corrected forecast ensembles
     mssge_string = "Complete"
     try:
-        
+
         await channel_layer.group_send(
             "notifications_hydroweb",
             {
-                "type": "simple_notifications",
+                "type": "data_notifications",
                 "reach_id": reach_id,
                 "product": product,
-                "command": "Return_Period_Bias_Data_Downloaded",
+                "command": "Plot_Forecast_Ensemble_Bias_Data_Downloaded",
                 "mssg": mssge_string,
+                "data": fixed_stats
             },
         )
     except Exception as e:
-        print("return period bias correction error 2")
+        print("forecast ensembles bias correction error 2")
         print(e)
         await channel_layer.group_send(
             "notifications_hydroweb",
@@ -898,12 +901,280 @@ async def return_periods_bias_correction(product,reach_id):
                 "reach_id": reach_id,
                 "product": product,
                 "mssg": mssge_string,
-                "command": "Return_Period_Bias_Data_Downloaded_Error",
+                "command": "Plot_Forecast_Ensemble_Bias_Data_Downloaded_Error",
                 
             },
         )   
 
-    return mssge_string 
+    
+    data_plot = get_corrected_records(forecast_record,simulated_df,fixed_stats_df,high_res_df2,high_res_df3,mean_wl,min_value1,min_wl,min_value2,max_wl,min_value3)
+    ### send message for the corrected forecast records
+    mssge_string = "Complete"
+    try:
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "data_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Plot_Forecast_Records_Bias_Data_Downloaded",
+                "mssg": mssge_string,
+                "data": data_plot
+            },
+        )
+    except Exception as e:
+        print("forecast bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Forecast_Records_Bias_Data_Downloaded_Error",
+                
+            },
+        )           
+    return mssge_string
+
+def common_data_forecast(reach_id,product):
+    simulated_df = hydroviewer_utility_object.cache_historical_simulation(active_app=app,cs_api_source=None,comid=reach_id, session=session,response_content=None)
+    simulated_df.index = pd.to_datetime(simulated_df.index)
+
+    #Hydroweb Observed Data
+    water_level_data_query = session.query(HydrowebData).filter(HydrowebData.hydroweb_product == product)
+    mean_wl,min_wl,max_wl = retrive_hydroweb_river_data(water_level_data_query)
+        # mean_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_mean.json'))
+    mean_wl.set_index('x', inplace=True)
+
+    mean_wl.index = pd.to_datetime(mean_wl.index)
+
+    # min_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_min.json'))
+    min_wl.set_index('x', inplace=True)
+    min_wl.index = pd.to_datetime(min_wl.index)
+    
+    # max_wl = pd.read_json(os.path.join(app.get_app_workspace().path,f'observed_data/{product}_max.json'))
+    max_wl.set_index('x', inplace=True)
+    max_wl.index = pd.to_datetime(max_wl.index)
+
+    #Mean Water Level
+    min_value1 = mean_wl['y'].min()
+    if min_value1 >= 0:
+        min_value1 = 0
+   
+    mean_adjusted = mean_wl - min_value1
+
+    #Min Water Level
+    min_value2 = min_wl['y'].min()
+
+    if min_value2 >= 0:
+        min_value2 = 0
+    
+    min_adjusted = min_wl - min_value2
+
+    #Max Water Level
+    min_value3 = max_wl['y'].min()
+
+    if min_value3 >= 0:
+        min_value3 = 0
+    
+    max_adjusted = max_wl - min_value3
+    
+    return simulated_df,mean_wl,min_wl,max_wl,min_value1,min_value2,min_value3,mean_adjusted,min_adjusted,max_adjusted
+
+def get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_value1,min_adjusted,min_value2,max_adjusted,min_value3):
+    
+    ensemble1, high_res_df1 = correct_bias_ensemble(simulated_df,forecast_ens,mean_adjusted,min_value1)
+    ensemble2, high_res_df2 = correct_bias_ensemble(simulated_df,forecast_ens,min_adjusted,min_value2)
+    ensemble3, high_res_df3 = correct_bias_ensemble(simulated_df,forecast_ens,max_adjusted,min_value3)
+
+    ensemble_list = [ensemble1,ensemble2,ensemble3]
+    max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean = retrieve_corrected_forecast_ensemble(ensemble_list,high_res_df1)
+    data_max = max_df.to_dict('records')
+    data_p75 = p75_df.to_dict('records')
+    data_p25 = p25_df.to_dict('records')
+    data_min = min_df.to_dict('records')
+    data_mean = mean_df.to_dict('records')
+    data_highres = high_res_df_mean.to_dict('records')
+
+
+    fixed_stats = {
+        'mean':data_mean,
+        'min': data_min,
+        'max': data_max,
+        'p25': data_p25,
+        'p75': data_p75,
+        'high_res':data_highres
+    }
+
+
+    # This is a file cache, will need to be replaced more elegant in the future ... #
+    new_max_df = max_df.copy()
+    new_max_df.set_index('x',inplace=True)
+    new_max_df.rename(columns={'y': 'flow_max_m^3/s'}, inplace=True)
+
+    new_p75_df = p75_df.copy()
+    new_p75_df.set_index('x',inplace=True)
+    new_p75_df.rename(columns={'y': 'flow_75%_m^3/s'}, inplace=True)
+
+    new_p25_df = p25_df.copy()
+    new_p25_df.set_index('x',inplace=True)
+    new_p25_df.rename(columns={'y': 'flow_25%_m^3/s'}, inplace=True)
+
+    new_min_df = min_df.copy()
+    new_min_df.set_index('x',inplace=True)
+    new_min_df.rename(columns={'y': 'flow_min_m^3/s'}, inplace=True)
+
+    new_mean_df = mean_df.copy()
+    new_mean_df.set_index('x',inplace=True)
+    new_mean_df.rename(columns={'y': 'flow_avg_m^3/s'}, inplace=True)
+
+    new_high_res_df_mean = high_res_df_mean.copy()
+
+    new_high_res_df_mean.rename(columns={'y': 'high_res_m^3/s'}, inplace=True)
+
+
+    # fixed_stats_df_cache = pd.concat([max_df, p75_df, mean_df, p25_df, min_df, high_res_df_mean], axis=1)
+    fixed_stats_df_cache = pd.concat([new_max_df, new_p75_df, new_mean_df, new_p25_df, new_min_df, new_high_res_df_mean], axis=1)
+
+
+    return fixed_stats, fixed_stats_df_cache, high_res_df1, high_res_df2,high_res_df3
+
+def get_forecast_ensembles_and_records(reach_id):
+    forecast_record = pd.read_json(os.path.join(app.get_app_workspace().path,f'forecast_data/{reach_id}.json'))
+    forecast_record.index = pd.to_datetime(forecast_record.index)
+    forecast_ens = pd.read_json(os.path.join(app.get_app_workspace().path,f'ensemble_forecast_data/{reach_id}.json'))
+    forecast_ens.index = pd.to_datetime(forecast_ens.index)
+    return forecast_ens, forecast_record
+
+def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,high_res_df3,mean_wl,min_value1,min_wl,min_value2,max_wl,min_value3):
+    data_plot = {}
+    # breakpoint()
+    date_ini = forecast_record.index[0]
+    month_ini = date_ini.month
+    
+    date_end = forecast_record.index[-1]
+    month_end = date_end.month
+    if month_end < month_ini:
+        meses1 = np.arange(month_ini, 13, 1)
+        meses2 = np.arange(1, month_end + 1, 1)
+        meses = np.concatenate([meses1, meses2])
+    else:
+        meses = np.arange(month_ini, month_end + 1, 1)
+
+    fixed_records1 = correct_bias_forecast_records(forecast_record,simulated_df,meses,mean_wl,min_value1)
+    fixed_records2 = correct_bias_forecast_records(forecast_record,simulated_df,meses,min_wl,min_value2)
+    fixed_records3 = correct_bias_forecast_records(forecast_record,simulated_df,meses,max_wl,min_value3)
+
+    x_vals = (fixed_stats.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[0])
+    max_visible = max(fixed_stats.max())
+
+    record_plot1 = fixed_records1.copy()
+    record_plot1 = record_plot1.loc[record_plot1.index >= pd.to_datetime(pd.to_datetime(fixed_stats.index[0]) - dt.timedelta(days=8))]
+    record_plot1 = record_plot1.loc[record_plot1.index <= pd.to_datetime(fixed_stats.index[0])]
+
+
+    if len(record_plot1.index) > 0:
+        records_plot_1_new_df = record_plot1.iloc[:, 0]
+        records_plot_1_new_df = records_plot_1_new_df.reset_index()
+        
+        records_plot_1_new_df.rename(columns={"index":'x',"streamflow_m^3/s": 'y'}, inplace=True)
+        records_plot_1_dict = records_plot_1_new_df.to_dict('records')
+        data_plot['record_plot1'] = records_plot_1_dict
+
+        x_vals = (record_plot1.index[0], fixed_stats.index[len(fixed_stats.index) - 1], fixed_stats.index[len(fixed_stats.index) - 1], record_plot1.index[0])
+        max_visible = max(record_plot1.max().values[0], max_visible)
+
+    record_plot2 = fixed_records2.copy()
+    record_plot2 = record_plot2.loc[record_plot2.index >= pd.to_datetime(pd.to_datetime(fixed_stats.index[0]) - dt.timedelta(days=8))]
+    record_plot2 = record_plot2.loc[record_plot2.index <= pd.to_datetime(fixed_stats.index[0])]
+
+    record_plot3 = fixed_records3.copy()
+    record_plot3 = record_plot3.loc[record_plot3.index >= pd.to_datetime(pd.to_datetime(fixed_stats.index[0]) - dt.timedelta(days=8))]
+    record_plot3 = record_plot3.loc[record_plot3.index <= pd.to_datetime(fixed_stats.index[0])]
+
+    breakpoint()
+    max_min_record_WL = {
+        'x': np.concatenate([record_plot3.index, record_plot2.index[::-1]]),
+        'y': np.concatenate([record_plot3.iloc[:, 0].values, record_plot2.iloc[:, 0].values[::-1]])
+    }
+
+    max_min_record_WL_df = pd.DataFrame(max_min_record_WL)
+    max_min_record_WL_df['x'] = pd.to_datetime(max_min_record_WL_df['x'])
+    max_min_record_WL_df['x'] = max_min_record_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    max_min_record_WL_df_dict = max_min_record_WL_df.to_dict('records')
+
+    max_record_WL = {
+        'x': record_plot3.index.values.tolist(),
+        'y': record_plot3.iloc[:, 0].values.tolist()
+    }
+    max_record_WL_df = pd.DataFrame(max_record_WL)
+    max_record_WL_df['x'] = pd.to_datetime(max_record_WL_df['x'])
+
+    max_record_WL_df['x'] = max_record_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    max_record_WL_df_dict = max_record_WL_df.to_dict('records')
+
+
+    min_record_WL = {
+        'x': record_plot2.index.values,
+        'y': record_plot2.iloc[:, 0].values
+    }
+    min_record_WL_df = pd.DataFrame(min_record_WL)
+    min_record_WL_df['x'] = pd.to_datetime(min_record_WL_df['x'])
+    min_record_WL_df['x'] = min_record_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    min_record_WL_df_dict = min_record_WL_df.to_dict('records')
+
+    if len(record_plot2.index) > 0:
+        data_plot['max_min_record_WL'] = max_min_record_WL_df_dict
+        data_plot['max_record_WL'] = max_record_WL_df_dict
+        data_plot['min_record_WL'] = min_record_WL_df_dict
+
+
+    ### check for refactoring 
+    max_min_high_res_WL = {
+        'x': np.concatenate([high_res_df3.index, high_res_df2.index[::-1]]).tolist(),
+        'y': np.concatenate([high_res_df3.iloc[:, 0].values, high_res_df2.iloc[:, 0].values[::-1]]).tolist()
+    }
+
+    max_min_high_res_WL_df = pd.DataFrame(max_min_high_res_WL)
+    max_min_high_res_WL_df['x'] = pd.to_datetime(max_min_high_res_WL_df['x'])
+
+    max_min_high_res_WL_df['x'] = max_min_high_res_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+    max_min_high_res_WL_df_dict = max_min_high_res_WL_df.to_dict('records')
+
+    max_high_res_WL = {
+        'x': high_res_df3.index.values.tolist(),
+        'y': high_res_df3.iloc[:, 0].values.tolist()
+    }
+    max_high_res_WL_df = pd.DataFrame(max_high_res_WL)
+    max_high_res_WL_df['x'] = pd.to_datetime(max_high_res_WL_df['x'])
+
+    max_high_res_WL_df['x'] = max_high_res_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+
+    max_high_res_WL_df_dict = max_high_res_WL_df.to_dict('records')
+
+    min_high_res_WL = {
+        'x': high_res_df2.index.values.tolist(),
+        'y': high_res_df2.iloc[:, 0].values.tolist()
+    }
+    min_high_res_WL_df = pd.DataFrame(min_high_res_WL)
+    min_high_res_WL_df['x'] = pd.to_datetime(min_high_res_WL_df['x'])
+
+    min_high_res_WL_df['x'] = min_high_res_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+    min_high_res_WL_df_dict = min_high_res_WL_df.to_dict('records')
+
+    if len(high_res_df2.index) > 0:
+        data_plot['max_min_high_res_WL'] = max_min_high_res_WL_df_dict
+        data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
+        data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
+    breakpoint()
+            
+    return data_plot
+
 async def forecast_records_bias_correction(product,reach_id):
     channel_layer = get_channel_layer()
     simulated_df = hydroviewer_utility_object.cache_historical_simulation(active_app=app,cs_api_source=None,comid=reach_id, session=session,response_content=None)
@@ -1323,7 +1594,6 @@ def correct_bias_ensemble(simulated_df,forecast_ens,value_adjusted,min_value):
 
 def correct_bias_forecast_records(forecast_record,simulated_df,meses,wl,min_value):
     #Mean WL
-
     fixed_records = pd.DataFrame()
 
     for mes in meses:
@@ -1365,10 +1635,45 @@ def correct_bias_forecast_records(forecast_record,simulated_df,meses,wl,min_valu
         corrected_values = corrected_values.multiply(min_factor_records_df, axis=0)
         corrected_values = corrected_values.multiply(max_factor_records_df, axis=0)
         corrected_values = corrected_values + min_value
-        fixed_records = fixed_records.append(corrected_values)
+        fixed_records = pd.concat([fixed_records,corrected_values])
 
-    fixed_records = fixed_records.sort_index(inplace=True)
+    fixed_records = fixed_records.sort_index()
     return fixed_records
+
+
+
+async def return_periods_bias_correction(product,reach_id):
+    channel_layer = get_channel_layer()
+    
+    mssge_string = "Complete"
+    try:
+        
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "command": "Return_Period_Bias_Data_Downloaded",
+                "mssg": mssge_string,
+            },
+        )
+    except Exception as e:
+        print("return period bias correction error 2")
+        print(e)
+        await channel_layer.group_send(
+            "notifications_hydroweb",
+            {
+                "type": "simple_notifications",
+                "reach_id": reach_id,
+                "product": product,
+                "mssg": mssge_string,
+                "command": "Return_Period_Bias_Data_Downloaded_Error",
+                
+            },
+        )   
+
+    return mssge_string 
 
 def gumbel_1(std: float, xbar: float, rp: int or float) -> float:
   """
