@@ -991,24 +991,37 @@ def get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_
 
     ensemble_list = [ensemble1,ensemble2,ensemble3]
     max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean = retrieve_corrected_forecast_ensemble(ensemble_list,high_res_df1)
-    data_max = max_df.to_dict('records')
+    min_df2 = min_df.copy()
+    min_df2.rename(columns={'y': 'y0'}, inplace=True)
+    max_min_df = pd.concat([max_df,min_df2],axis=1)
+    
+    p25_df2 = p25_df.copy()
+    p25_df2.rename(columns={'y': 'y0'}, inplace=True)
+    p75_25_df = pd.concat([p75_df,p25_df2],axis=1)
+
+    # data_max = max_df.to_dict('records')
     data_p75 = p75_df.to_dict('records')
     data_p25 = p25_df.to_dict('records')
-    data_min = min_df.to_dict('records')
+    # data_min = min_df.to_dict('records')
     data_mean = mean_df.to_dict('records')
+    p75_25 = p75_25_df.to_dict('records')
+
     data_highres = high_res_df_mean.to_dict('records')
+    max_min = max_min_df.to_dict('records')
 
 
     fixed_stats = {
         'mean':data_mean,
-        'min': data_min,
-        'max': data_max,
+        # 'min': data_min,
+        # 'max': data_max,
         'p25': data_p25,
         'p75': data_p75,
-        'high_res':data_highres
+        'p75_25':p75_25,
+        'high_res':data_highres,
+        'max_min':max_min
     }
 
-
+    # breakpoint()
     # This is a file cache, will need to be replaced more elegant in the future ... #
     new_max_df = max_df.copy()
     new_max_df.set_index('x',inplace=True)
@@ -1080,6 +1093,8 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
         records_plot_1_new_df = records_plot_1_new_df.reset_index()
         
         records_plot_1_new_df.rename(columns={"index":'x',"streamflow_m^3/s": 'y'}, inplace=True)
+        records_plot_1_new_df['x'] = records_plot_1_new_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
+
         records_plot_1_dict = records_plot_1_new_df.to_dict('records')
         data_plot['record_plot1'] = records_plot_1_dict
 
@@ -1094,7 +1109,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
     record_plot3 = record_plot3.loc[record_plot3.index >= pd.to_datetime(pd.to_datetime(fixed_stats.index[0]) - dt.timedelta(days=8))]
     record_plot3 = record_plot3.loc[record_plot3.index <= pd.to_datetime(fixed_stats.index[0])]
 
-    breakpoint()
+    # breakpoint()
     max_min_record_WL = {
         'x': np.concatenate([record_plot3.index, record_plot2.index[::-1]]),
         'y': np.concatenate([record_plot3.iloc[:, 0].values, record_plot2.iloc[:, 0].values[::-1]])
@@ -1171,7 +1186,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
         data_plot['max_min_high_res_WL'] = max_min_high_res_WL_df_dict
         data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
         data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
-    breakpoint()
+    # breakpoint()
             
     return data_plot
 
@@ -1534,14 +1549,6 @@ def retrieve_corrected_forecast_ensemble(ensemble_list,high_res_df_mean):
 
     return [max_df,p75_df,p25_df,min_df,mean_df,high_res_df_mean]
 
-
-# def format_df_ensembles(corrected_ensembles,y_column_to_rename,):
-#     df = corrected_ensembles.quantile(1.0, axis=1).to_frame()
-#     df.index = pd.to_datetime(df.index)
-#     df.index = df.index.to_series().dt.strftime("%Y-%m-%d %H:%M:%S")
-#     df= df.reset_index()
-#     df.rename(columns={"datetime":'x',f'{y_column_to_rename}': 'y'}, inplace=True)
-#     return df
 
 def correct_bias_ensemble(simulated_df,forecast_ens,value_adjusted,min_value):
     simulated_df.index = pd.to_datetime(simulated_df.index)
