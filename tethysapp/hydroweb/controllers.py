@@ -1014,8 +1014,8 @@ def get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_
         'mean':data_mean,
         # 'min': data_min,
         # 'max': data_max,
-        'p25': data_p25,
-        'p75': data_p75,
+        # 'p25': data_p25,
+        # 'p75': data_p75,
         'p75_25':p75_25,
         'high_res':data_highres,
         'max_min':max_min
