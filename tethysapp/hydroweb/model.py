@@ -194,15 +194,25 @@ def cache_hydroweb_data(hydroweb_product,url,session):
             # df_val = df_val.drop(columns=['id','type_data','hydroweb_product'])
             # df_min = df_min.drop(columns=['id','type_data','hydroweb_product'])
             # df_max = df_max.drop(columns=['id','type_data','hydroweb_product'])
+            # breakpoint()
+            df_min_extra = df_min.copy()
+            df_min_extra = df_min_extra.rename(columns={'y': 'y0'})
+            df_min_extra = df_min_extra.reset_index(drop=True)
 
+            # df_min = df_min.rename(columns={'y': 'y0'})
+            df_min = df_min.reset_index(drop=True)
             data_val = df_val.to_dict('records')
-            data_max = df_max.to_dict('records')
+            # data_max = df_max.to_dict('records')
             data_min = df_min.to_dict('records')
+            df_max= df_max.reset_index(drop=True)
+            df_max_min = pd.concat([df_min_extra,df_max], axis=1)
+            df_max_min_val = df_max_min.to_dict('records')
 
             resp_obj['data'] = {
                 'val': data_val,
+                'min_max': df_max_min_val,
                 'min': data_min,
-                'max': data_max
+                # 'max': data_max
             }
 
             ## Query metadata 
