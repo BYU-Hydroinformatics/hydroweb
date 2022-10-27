@@ -999,10 +999,10 @@ def get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_
     p25_df2.rename(columns={'y': 'y0'}, inplace=True)
     p75_25_df = pd.concat([p75_df,p25_df2],axis=1)
 
-    # data_max = max_df.to_dict('records')
+    data_max = max_df.to_dict('records')
     data_p75 = p75_df.to_dict('records')
     data_p25 = p25_df.to_dict('records')
-    # data_min = min_df.to_dict('records')
+    data_min = min_df.to_dict('records')
     data_mean = mean_df.to_dict('records')
     p75_25 = p75_25_df.to_dict('records')
 
@@ -1012,10 +1012,10 @@ def get_forecast_stats_and_high_res(simulated_df,forecast_ens,mean_adjusted,min_
 
     fixed_stats = {
         'mean':data_mean,
-        # 'min': data_min,
-        # 'max': data_max,
+        'min': data_min,
+        'max': data_max,
         'p25': data_p25,
-        # 'p75': data_p75,
+        'p75': data_p75,
         'p75_25':p75_25,
         'high_res':data_highres,
         'max_min':max_min
