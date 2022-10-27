@@ -1130,7 +1130,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
 
     max_record_WL_df['x'] = max_record_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # max_record_WL_df_dict = max_record_WL_df.to_dict('records')
+    max_record_WL_df_dict = max_record_WL_df.to_dict('records')
 
 
     min_record_WL = {
@@ -1140,7 +1140,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
     min_record_WL_df = pd.DataFrame(min_record_WL)
     min_record_WL_df['x'] = pd.to_datetime(min_record_WL_df['x'])
     min_record_WL_df['x'] = min_record_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
-    # min_record_WL_df_dict = min_record_WL_df.to_dict('records')
+    min_record_WL_df_dict = min_record_WL_df.to_dict('records')
 
     max_min_area_record_WL_df = pd.concat([max_record_WL_df,min_record_WL_df], axis=1)
     max_min_area_record_WL_df_dict = max_min_area_record_WL_df.to_dict('records')
@@ -1149,8 +1149,8 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
         # data_plot['max_min_record_WL'] = max_min_record_WL_df_dict
         data_plot['max_min_area_record_WL'] = max_min_area_record_WL_df_dict
 
-        # data_plot['max_record_WL'] = max_record_WL_df_dict
-        # data_plot['min_record_WL'] = min_record_WL_df_dict
+        data_plot['max_record_WL'] = max_record_WL_df_dict
+        data_plot['min_record_WL'] = min_record_WL_df_dict
 
 
     ### check for refactoring 
@@ -1174,7 +1174,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
 
     max_high_res_WL_df['x'] = max_high_res_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
 
-    # max_high_res_WL_df_dict = max_high_res_WL_df.to_dict('records')
+    max_high_res_WL_df_dict = max_high_res_WL_df.to_dict('records')
 
     min_high_res_WL = {
         'x': high_res_df2.index.values.tolist(),
@@ -1184,7 +1184,7 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
     min_high_res_WL_df['x'] = pd.to_datetime(min_high_res_WL_df['x'])
 
     min_high_res_WL_df['x'] = min_high_res_WL_df['x'].dt.strftime("%Y-%m-%d %H:%M:%S")
-    # min_high_res_WL_df_dict = min_high_res_WL_df.to_dict('records')
+    min_high_res_WL_df_dict = min_high_res_WL_df.to_dict('records')
     
     max_min_high_area_record_WL_df = pd.concat([max_high_res_WL_df,min_high_res_WL_df], axis=1)
 
@@ -1193,10 +1193,9 @@ def get_corrected_records(forecast_record,simulated_df,fixed_stats,high_res_df2,
 
     if len(high_res_df2.index) > 0:
         data_plot['max_min_high_res_WL'] = max_min_high_area_record_WL_df_dict
-
         # data_plot['max_min_high_res_WL'] = max_min_high_res_WL_df_dict
-        # data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
-        # data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
+        data_plot['max_high_res_WL'] = max_high_res_WL_df_dict
+        data_plot['min_high_res_WL'] = min_high_res_WL_df_dict
     # breakpoint()
             
     return data_plot
