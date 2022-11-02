@@ -141,28 +141,32 @@ def virtual_stations(request):
                 'status':only_rivers_feature[3],
                 'validation':only_rivers_feature[4],
                 'comid': only_rivers_feature[5],
-                'comid_geoglows':9007781
+                # 'comid_geoglows':9007781
+                'comid_geoglows':only_rivers_feature[6]
+
 
             }
 
         }
         features.append(river_extent_feature)
+    
+    ## just uncomment this for lake support
 
-    for only_lakes_feature in only_lakes_features:
-        lake_extent_feature = {
-            'type': 'Feature',
-            'geometry': json.loads(only_lakes_feature[0]),
-            'properties':{
-                'lake_name': only_lakes_feature[1],
-                'basin':only_lakes_feature[2],
-                'status':only_lakes_feature[3],
-                'validation':only_lakes_feature[4],
-                'comid': only_lakes_feature[5]
+    # for only_lakes_feature in only_lakes_features:
+    #     lake_extent_feature = {
+    #         'type': 'Feature',
+    #         'geometry': json.loads(only_lakes_feature[0]),
+    #         'properties':{
+    #             'lake_name': only_lakes_feature[1],
+    #             'basin':only_lakes_feature[2],
+    #             'status':only_lakes_feature[3],
+    #             'validation':only_lakes_feature[4],
+    #             'comid': only_lakes_feature[5]
 
-            }
+    #         }
 
-        }
-        features.append(lake_extent_feature)
+    #     }
+        # features.append(lake_extent_feature)
     geojson_stations = {
         'type': 'FeatureCollection',
         'crs': {

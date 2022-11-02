@@ -64,6 +64,30 @@ def init_flooded_addresses_db(engine,first_time):
         # print(dest_river)
         # print(dest_lake)
 
+        # added to just trim the needed things
+
+        ## get the file to trim
+        file_path_clip = os.path.join(app.get_app_workspace().path, 'savegeo.json')
+        df_clip = gpd.read_file(file_path_clip, format='GML')
+        
+        df_clip.crs = 'EPSG:4326'
+        df_clip['geom'] = df_clip['geometry'].apply(lambda x: WKTElement(x.wkt, srid=4326))
+        df_clip.drop('geometry', 1, inplace=True)
+        df_clip = df_clip.rename({'Station': 'name', 'COMID': 'comid'}, axis='columns')
+        
+        ## filter only the rows that have the river name
+        df_clip_no_commid = dest_river[dest_river['name'].isin(df_clip['name'].tolist())]
+        
+        #drop the columns
+        df_clip = df_clip.drop(['River', 'Latitude','Longitude','geom'], axis=1)
+        
+        df_clip_commid = df_clip_no_commid.merge(df_clip, how='left')
+        print(df_clip_commid)
+
+        #insert in database
+        df_clip_commid.to_sql('river', engine, if_exists='append', index=False, 
+                         dtype={'geom': Geometry('POINT', srid= 4326)})
+
         dest_river.to_sql('river', engine, if_exists='append', index=False, 
                          dtype={'geom': Geometry('POINT', srid= 4326)})
 
