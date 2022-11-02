@@ -29,9 +29,10 @@ class River(Base):
     basin = Column(String)
     status = Column(String)
     validation = Column(String)
+    comid = Column(String)
 
 
-    def __init__(self, wkt, name,lat,lon,river_name, basin,status,validation):
+    def __init__(self, wkt, name,lat,lon,river_name, basin,status,validation,comid):
         """
         Constructor
         """
@@ -44,6 +45,7 @@ class River(Base):
         self.basin = basin
         self.status = status
         self.validation = validation
+        self.comid = comid
 
 
 class Lake(Base):
