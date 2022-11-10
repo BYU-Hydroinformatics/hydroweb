@@ -37,7 +37,8 @@ class DataConsumer(AsyncWebsocketConsumer):
                 "notifications_hydroweb",
                 json_obj,
             )    
-            # print(mssge_string)
+
+        # print(mssge_string)
         # await self.send(text_data)
 
 
