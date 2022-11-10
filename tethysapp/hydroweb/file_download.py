@@ -63,8 +63,8 @@ def hydroweb_download(request):
 
         mean_wl,min_wl,max_wl = retrive_hydroweb_river_data(water_level_data_query)
         
-        min_wl = min_wl.rename(columns={'x':'date', 'y':'min'})
-        max_wl = max_wl.rename(columns={'x':'date', 'y':'max'})
+        min_wl = min_wl.rename(columns={'x':'date', 'y':'water level min'})
+        max_wl = max_wl.rename(columns={'x':'date', 'y':'water level max'})
 
         max_min_WL_df = pd.merge(min_wl, max_wl, on='date', how='outer')
 
@@ -74,7 +74,30 @@ def hydroweb_download(request):
     if type_data == "Historical Simulation":
         simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
         simulated_df = simulated_df.reset_index()
-        breakpoint()
         response['Content-Disposition'] = f'attachment; filename={type_data}.csv'
         simulated_df.to_csv(response, index=False)
+
+    if type_data == "Bias Corrected Mean Level":
+        corrected_df_mean  = cache_historical_data(data_df=None,comid=reach_id,type_data="corrected_mean",session=session)
+        corrected_df_mean = corrected_df_mean.reset_index()
+        corrected_df_mean = corrected_df_mean.rename(columns={'y':'water level'})
+
+        response['Content-Disposition'] = f'attachment; filename={type_data}.csv'
+        corrected_df_mean.to_csv(response, index=False)
+
+    if type_data == "Bias Corrected Minimun Level":
+        corrected_df_min  = cache_historical_data(data_df=None,comid=reach_id,type_data="corrected_min",session=session)
+        corrected_df_min = corrected_df_min.reset_index()
+        corrected_df_min = corrected_df_min.rename(columns={'y':'water level'})
+
+        response['Content-Disposition'] = f'attachment; filename={type_data}.csv'
+        corrected_df_min.to_csv(response, index=False)
+
+    if type_data == "Bias Corrected Maximun Level":
+        corrected_df_max  = cache_historical_data(data_df=None,comid=reach_id,type_data="corrected_max",session=session)
+        corrected_df_max = corrected_df_max.reset_index()
+        corrected_df_max = corrected_df_max.rename(columns={'y':'water level'})
+
+        response['Content-Disposition'] = f'attachment; filename={type_data}.csv'
+        corrected_df_max.to_csv(response, index=False)        
     return response
