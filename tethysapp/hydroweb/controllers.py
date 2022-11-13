@@ -492,31 +492,50 @@ async def bias_correction(product,reach_id):
 
 
 
-        # historical_simulation_query = session.query(HistoricalSimulation).filter(HistoricalSimulation.reach_id == reach_id)
-        # if historical_simulation_query.first() is not None:
-        #     simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
+        historical_simulation_query = session.query(HistoricalSimulation).filter(HistoricalSimulation.reach_id == reach_id)
+        if historical_simulation_query.first() is not None:
+            simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
         
-        # else:
-        #     api_base_url = 'https://geoglows.ecmwf.int/api'
-        #     #Geoglows Historical Simulation Data
-        #     response_await = await async_client.get(
-        #                 url = f"{api_base_url}/HistoricSimulation/",
-        #                 params = {
-        #                     "reach_id": reach_id
-        #                 },
-        #                 timeout=None          
-        #     )
+        else:
+            api_base_url = 'https://geoglows.ecmwf.int/api'
+            #Geoglows Historical Simulation Data
+            response_await = await async_client.get(
+                        url = f"{api_base_url}/HistoricSimulation/",
+                        params = {
+                            "reach_id": reach_id
+                        },
+                        timeout=None          
+            )
 
-        #     # response = response_await.json()
-        #     # print(response_await)
-        #     # print(response_await.text)
+            # response = response_await.json()
+            # print(response_await)
+            # print(response_await.text)
 
-        #     print("saving data bro")
-        #     simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,api_base_url,reach_id,session,response_content=response_await.text)
-        #     print(simulated_df.head)
-        #     session.close()
+            print("saving data bro")
+            simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,api_base_url,reach_id,session,response_content=response_await.text)
+            # print(simulated_df.head)
+            session.close()
+            simulated_df2 = simulated_df.copy()
+            simulated_df2 = simulated_df2.reset_index()
+            simulated_df2 = simulated_df2.rename(columns={'datetime': 'x', 'streamflow_m^3/s': 'y'})
+            # simulated_df['x']= simulated_df['x'].dt.strftime('%Y-%m-%d')
 
-        simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
+            simulated_json = simulated_df2.to_json(orient='records')
+            json_obj = {}
+            mssge_string = "Plot_Data"
+            json_obj["data"] = simulated_json
+            json_obj["mssg"] = "complete"
+            json_obj['type'] = 'data_notifications'
+            json_obj['product'] = product,
+            json_obj['reach_id'] = reach_id,
+            json_obj['command'] = mssge_string
+
+            await channel_layer.group_send(
+                "notifications_hydroweb",
+                json_obj,
+            )
+
+        # simulated_df = hydroviewer_utility_object.cache_historical_simulation(app,None,reach_id,session,response_content=None)
 
         simulated_df.index = pd.to_datetime(simulated_df.index)
 
@@ -764,7 +783,7 @@ async def make_forecast_api_calls(api_base_url,reach_id,product):
 
 async def fake_print_custom(api_base_url,reach_id,product,command):
     print(f'{command} request at {api_base_url},for {reach_id} already saved')
-    await asyncio.sleep(1) # Mimic some network delay
+    # await asyncio.sleep(1) # Mimic some network delay
     channel_layer = get_channel_layer()
    
     await channel_layer.group_send(
